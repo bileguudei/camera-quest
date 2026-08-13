@@ -17,7 +17,7 @@
     "test:edge": "deno test --allow-env --frozen supabase/functions/game-api/index_test.ts",
     "test:supabase": "supabase test db",
     "smoke:supabase": "node scripts/smoke-supabase.mjs",
-    "test:python": "cd vision-service && .venv/bin/ruff check app tests scripts && .venv/bin/mypy app tests scripts && .venv/bin/pytest",
+    "test:python": "cd vision-service && .venv/bin/python -m ruff check app tests scripts modal_app.py && .venv/bin/python -m mypy app tests scripts && .venv/bin/python -m pytest && .venv/bin/python -m scripts.generate_openapi --check && .venv/bin/python -m py_compile modal_app.py",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run check:contracts && npm run build"
   },
   "dependencies": {

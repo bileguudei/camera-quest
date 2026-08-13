@@ -105,10 +105,15 @@ select extensions.ok(
   ] from public.turns where id = '44444444-4444-4444-8444-444444444444'),
   'passed result is canonical for both vision pass and timeout-race responses'
 );
-select extensions.is(
-  (select count(*)::integer from public.player_achievements where player_id = '11111111-1111-4111-8111-111111111111'),
-  1,
-  'first successful turn unlocks first_clear'
+select extensions.set_eq(
+  $$
+    select a.key
+    from public.player_achievements pa
+    join public.achievements a on a.id = pa.achievement_id
+    where pa.player_id = '11111111-1111-4111-8111-111111111111'
+  $$,
+  array['first_clear', 'quick_draw', 'on_fire']::text[],
+  'fast third consecutive success unlocks the exact eligible achievements'
 );
 select extensions.is(
   (select current_streak from public.player_profiles where id = '11111111-1111-4111-8111-111111111111'),

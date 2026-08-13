@@ -103,7 +103,9 @@ Direct imports are intentional. Do not add barrel files or duplicate Supabase se
 - Frame uploads are five 512×512 JPEGs, each capped at 300 KB and the request capped at 1.5 MiB.
 - Calibration tokens are HMAC-signed, owner-bound, and expire after 10 minutes.
 - Sequence numbers have container-fast replay/rate checks and a database unique key as the global guard.
-- Sentry scrubbers delete request bodies/cookies and filter image/frame-like fields on both Next.js and Python.
+- If Sentry is enabled, its scrubbers delete request bodies/cookies and filter image/frame-like
+  fields on both Next.js and Python. Empty DSNs keep observability disabled without changing game
+  behavior.
 - A turn with zero successful vision attempts gets one penalty-free replay. Retry state propagates to the replacement turn so it cannot loop forever.
 
 ## Add a quest using an existing validator

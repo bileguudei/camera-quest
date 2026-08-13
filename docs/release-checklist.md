@@ -30,7 +30,7 @@
 - [ ] Finger/smile/color true-pass ≥ 95% within 2 seconds
 - [ ] Wrong-target false-pass ≤ 1%
 - [ ] Duplicate score/XP award = 0
-- [ ] No camera frame in Supabase, Modal logs, Sentry event, or trace attachment
+- [ ] No camera frame in Supabase, Modal logs, or any configured observability event/trace attachment
 - [ ] No critical desktop/mobile UI overlap
 
 ## Promotion order

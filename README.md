@@ -49,16 +49,22 @@ python3.11 -m venv .venv
 .venv/bin/python scripts/generate_openapi.py --check
 ```
 
-Modal CLI-г тусад нь суулгаад secret үүсгэнэ. Secret-ийн key-үүд [.env.example](.env.example)-ийн “Modal secret” хэсэгт бий.
+Modal CLI-г тусад нь суулгаад secret үүсгэнэ. Secret-ийн key-үүд
+[vision-service/.env.modal.example](vision-service/.env.modal.example)-д бий. Хувийн Modal
+account-ыг солихгүйгээр team workspace profile болон тусгаарласан `staging`/`production`
+environment үүсгэх бүрэн дарааллыг [Modal deployment runbook](docs/modal-deployment.md)-оос дагана.
 
 ```bash
 python3.11 -m pip install 'modal>=1,<2'
-modal setup
-modal run modal_app.py::build_tensorrt_artifact
-modal deploy modal_app.py
+modal token new --profile camera-quest-team --activate
+modal run --env staging modal_app.py::build_tensorrt_artifact
+modal deploy --env staging modal_app.py
 ```
 
 `build_tensorrt_artifact` нь official RF-DETR-L pretrained weight-ээс T4-д зориулсан fixed-batch-5 FP16 engine үүсгэж, checksum manifest-тай Modal Volume-д хадгална. Production deploy-оос өмнө энэ command амжилттай дууссан байх ёстой.
+
+Sentry заавал биш. `NEXT_PUBLIC_SENTRY_DSN` болон Modal secret-ийн `SENTRY_DSN` хоосон үед
+frontend болон vision service event илгээхгүй; үндсэн game/vision flow өөрчлөгдөхгүй.
 
 ## Generated contracts
 

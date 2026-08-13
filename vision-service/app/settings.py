@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, HttpUrl, SecretStr, computed_field
+from pydantic import Field, HttpUrl, SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     max_body_bytes: int = 1_572_864
     sentry_dsn: SecretStr | None = None
     environment: str = "development"
+
+    @field_validator("gemini_api_key", "sentry_dsn", mode="before")
+    @classmethod
+    def empty_optional_secret_is_none(cls, value: object) -> object:
+        # Dotenv templates intentionally keep optional keys blank; treat those
+        # values as disabled instead of initializing their external SDKs.
+        return None if value == "" else value
 
     @computed_field  # type: ignore[prop-decorator]
     @property
