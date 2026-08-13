@@ -1,0 +1,35 @@
+project_id = "camera-quest"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://127.0.0.1:3000"]
+enable_anonymous_sign_ins = true
+
+# Keep hosted security defaults explicit so `config push` cannot inherit the
+# more permissive local-development defaults for unused email/TOTP flows.
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m"
+otp_length = 8
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[functions.game-api]
+# The gateway verifier does not authorize opaque publishable API keys. The
+# function validates the actual user bearer token with auth.getUser().
+verify_jwt = false

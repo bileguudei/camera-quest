@@ -1,0 +1,90 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "npm:zod@4";
+import { commandSchema } from "./schema.ts";
+import { bearerToken, supabasePublicKey } from "./requestPolicy.ts";
+
+const allowedOrigins = new Set(
+  (Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "http://localhost:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
+
+const headersFor = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": origin && allowedOrigins.has(origin) ? origin : "null",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Vary": "Origin",
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store",
+});
+
+const json = (origin: string | null, body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: headersFor(origin) });
+
+Deno.serve(async (request) => {
+  const origin = request.headers.get("origin");
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: allowedOrigins.has(origin ?? "") ? 204 : 403, headers: headersFor(origin) });
+  }
+  if (request.method !== "POST" || (origin && !allowedOrigins.has(origin))) {
+    return json(origin, { code: "INVALID_REQUEST" }, 403);
+  }
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > 64_000) return json(origin, { code: "INVALID_REQUEST" }, 413);
+
+  const authorization = request.headers.get("authorization");
+  const accessToken = bearerToken(authorization);
+  if (!accessToken) return json(origin, { code: "UNAUTHORIZED" }, 401);
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const publicKey = supabasePublicKey(
+    Deno.env.get("SUPABASE_PUBLISHABLE_KEYS"),
+    Deno.env.get("SUPABASE_ANON_KEY"),
+  );
+  if (!supabaseUrl || !publicKey) return json(origin, { code: "GAME_UNAVAILABLE" }, 503);
+  const client = createClient(supabaseUrl, publicKey, {
+    global: { headers: { Authorization: authorization } },
+    auth: { persistSession: false },
+  });
+
+  const user = await client.auth.getUser(accessToken);
+  if (user.error || !user.data.user) return json(origin, { code: "UNAUTHORIZED" }, 401);
+
+  let parsed: z.infer<typeof commandSchema>;
+  try {
+    parsed = commandSchema.parse(await request.json());
+  } catch {
+    return json(origin, { code: "INVALID_REQUEST" }, 400);
+  }
+
+  const rpc = (() => {
+    switch (parsed.command) {
+      case "create-game":
+        return client.rpc("create_game", { p_players: parsed.payload.players });
+      case "prepare-turn":
+        return client.rpc("prepare_turn", {
+          p_game_id: parsed.payload.gameId,
+          p_player_id: parsed.payload.playerId,
+          p_round: parsed.payload.round,
+          p_background_classes: parsed.payload.backgroundClasses,
+        });
+      case "activate-turn":
+        return client.rpc("activate_turn", { p_turn_id: parsed.payload.turnId });
+      case "expire-turn":
+        return client.rpc("expire_turn", { p_turn_id: parsed.payload.turnId });
+      case "complete-game":
+        return client.rpc("complete_game", { p_game_id: parsed.payload.gameId });
+      case "abandon-game":
+        return client.rpc("abandon_game", { p_game_id: parsed.payload.gameId });
+    }
+  })();
+
+  const result = await rpc;
+  if (result.error) {
+    const known = ["TURN_EXPIRED", "TURN_NOT_ACTIVE", "GAME_NOT_OWNED", "NO_QUEST_AVAILABLE"];
+    const code = known.find((value) => result.error.message.includes(value)) ?? "GAME_UNAVAILABLE";
+    return json(origin, { code, message: code }, code === "GAME_UNAVAILABLE" ? 503 : 409);
+  }
+  return json(origin, result.data);
+});
