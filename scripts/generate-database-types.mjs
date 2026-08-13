@@ -12,10 +12,21 @@ const generated = execFileSync(
   ["gen", "types", "typescript", ...connectionArgs, "--schema", "public"],
   { cwd: root, encoding: "utf8" },
 );
+
+// A linked project may include PostgREST version metadata while the local CLI
+// omits it. It is not part of our public schema contract, so normalize it out
+// to keep local, CI, and linked-project generation reproducible.
+const stableGenerated = generated
+  .replace(
+    /  \/\/ Allows to automatically instantiate createClient with right options\n  \/\/ instead of createClient<Database, \{ PostgrestVersion: 'XX' \}>\(URL, KEY\)\n  __InternalSupabase: \{\n    PostgrestVersion: "[^"]+"\n  \}\n/,
+    "",
+  )
+  .trimEnd();
+
 const directory = join(root, "supabase/migrations");
 const hash = createHash("sha256");
 for (const file of readdirSync(directory).filter((item) => item.endsWith(".sql")).sort()) {
   hash.update(readFileSync(join(directory, file)));
 }
 const header = `/** Generated from Supabase schema. Do not edit by hand.\n * schema-sha256: ${hash.digest("hex")}\n */\n\n`;
-writeFileSync(join(root, "src/generated/database.types.ts"), header + generated, "utf8");
+writeFileSync(join(root, "src/generated/database.types.ts"), `${header}${stableGenerated}\n`, "utf8");
