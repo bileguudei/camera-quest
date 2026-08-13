@@ -14,7 +14,7 @@
     "generate:vision": "openapi-typescript vision-service/openapi.json -o src/generated/vision-api.ts",
     "generate:database": "node scripts/generate-database-types.mjs",
     "check:contracts": "node scripts/check-generated-contracts.mjs",
-    "test:edge": "deno test --allow-env supabase/functions/game-api/index_test.ts",
+    "test:edge": "deno test --allow-env --frozen supabase/functions/game-api/index_test.ts",
     "test:supabase": "supabase test db",
     "smoke:supabase": "node scripts/smoke-supabase.mjs",
     "test:python": "cd vision-service && .venv/bin/ruff check app tests scripts && .venv/bin/mypy app tests scripts && .venv/bin/pytest",

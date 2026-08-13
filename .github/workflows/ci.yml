@@ -54,20 +54,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Edge tests import npm:zod, so node_modules must exist before Deno
+      # resolves the function's npm: dependencies.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - run: deno test --allow-env supabase/functions/game-api/index_test.ts
+      - run: npm run test:edge
       - run: supabase start
       - run: supabase db reset
       - run: supabase test db
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
       - run: npm run generate:database
       - run: git diff --exit-code -- src/generated/database.types.ts
