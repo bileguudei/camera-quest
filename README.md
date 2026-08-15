@@ -90,20 +90,28 @@ npm run dev
 adapter ашиглах тул жинхэнэ AI танихгүй. Тоглож байх үед зүүн талын dev товчоор `Success` эсвэл
 `Timeout` өгч бүх screen flow-г шалгана.
 
-### 3B. Жинхэнэ camera + cloud AI шалгах
+### 3B. Багийн гишүүн чиний Supabase + Modal-тай ажиллуулах
 
-Team project owner-оос дараах **browser-safe** 3 утгыг авна:
+Багийн гишүүнд Supabase эсвэл Modal account, CLI хэрэггүй. Clone хийсэн frontend нь чиний одоо
+холбосон hosted Supabase болон Modal staging service-ийг шууд ашиглана.
+
+`.env.local` нь security-ийн үүднээс Git-д ордоггүй учраас clone хийхэд автоматаар ирэхгүй. Project
+owner өөрийн `.env.local`-ийг private team channel-аар явуулах эсвэл доорх утгуудыг өгнө:
 
 - Supabase project URL
-- Supabase publishable key
+- Supabase **publishable** key
 - Modal vision endpoint URL
 
-Root-ийн `.env.local` файлд:
+Publishable key нь browser/mobile app-д ашиглах зориулалттай, RLS-ийг bypass хийдэггүй public key.
+Харин Supabase secret/service-role key болон Modal token-ийг хэзээ ч явуулахгүй. Дэлгэрэнгүйг
+[Supabase API key documentation](https://supabase.com/docs/guides/getting-started/api-keys)-оос харна.
+
+Багийн гишүүн project-ийн root буюу `package.json`-тай нэг хавтаст `.env.local` үүсгэнэ:
 
 ```dotenv
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
-NEXT_PUBLIC_VISION_URL=https://YOUR_MODAL_ENDPOINT
+NEXT_PUBLIC_SUPABASE_URL=https://jfavjvcwdxspwibbdehc.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=OWNER_OOS_AVSAN_PUBLISHABLE_KEY
+NEXT_PUBLIC_VISION_URL=https://ijilmurunnamkhaidorj-staging--camera-quest-vision-api.ap-south.modal.run
 NEXT_PUBLIC_VISION_ENABLED=true
 NEXT_PUBLIC_DEV_CONTROLS_ENABLED=false
 NEXT_PUBLIC_SENTRY_DSN=
@@ -115,6 +123,10 @@ NEXT_PUBLIC_SENTRY_DSN=
 npm run dev
 ```
 
+Бүх компьютер дээр [http://localhost:3000](http://localhost:3000) origin ижил тул одоогийн CORS
+тохиргоотой ажиллана. Өөр port сонгохгүй. Browser бүр Supabase anonymous device account-аа
+автоматаар үүсгэх бөгөөд game/score/XP нь нэг hosted backend-д, тусдаа owner identity-гаар хадгалагдана.
+
 Chrome дээр [http://localhost:3000](http://localhost:3000)-ийг нээгээд:
 
 1. 1–6 тоглогчийн нэрийг оруулна.
@@ -124,8 +136,8 @@ Chrome дээр [http://localhost:3000](http://localhost:3000)-ийг нээгэ
 5. Calibration үед гараа/объектоо харуулахгүй, камераа тогтвортой барина.
 6. Quest гарсны дараа хайж буй зүйл эсвэл гараа camera-ийн бүтэн хүрээнд тод харуулна.
 
-> `SUPABASE_SECRET_KEY`, Modal token, Gemini key, calibration secret-ийг `.env.local`-ийн
-> `NEXT_PUBLIC_*` хувьсагчид хэзээ ч хийж болохгүй.
+> `SUPABASE_SECRET_KEY`, `service_role`, Modal token, Gemini key, calibration secret-ийг
+> `.env.local`-ийн `NEXT_PUBLIC_*` хувьсагчид хэзээ ч хийж болохгүй.
 
 ## Түгээмэл асуудал
 
