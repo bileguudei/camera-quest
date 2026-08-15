@@ -1,7 +1,5 @@
 "use client";
 
-import { ROI_CSS_SIZE } from "@/features/camera/roi";
-
 type FrameState = "idle" | "locking" | "found" | "wrong";
 
 const TONE: Record<FrameState, string> = {
@@ -12,8 +10,8 @@ const TONE: Record<FrameState, string> = {
 };
 
 /**
- * The aiming square. Everything the detector counts must sit inside it, so the
- * player always knows where to hold the object.
+ * The edge-to-edge recognition frame makes the detector's full-camera scope
+ * visible without obscuring the live playfield.
  */
 export function TargetFrame({
   state = "idle",
@@ -36,8 +34,7 @@ export function TargetFrame({
     // the two never fight over `transform`.
     <div
       aria-hidden
-      className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-      style={{ width: ROI_CSS_SIZE, aspectRatio: "1" }}
+      className="pointer-events-none absolute inset-3 z-10 sm:inset-4"
     >
       <div
         key={shakeKey}
@@ -64,7 +61,7 @@ export function TargetFrame({
 
       {hint && (
         <span
-          className="absolute inset-x-0 -bottom-8 truncate text-center text-xs font-bold text-ink-3 sm:text-sm"
+          className="absolute inset-x-10 bottom-28 truncate text-center text-xs font-bold text-ink-3 sm:bottom-32 sm:text-sm"
           style={{ opacity: hot ? 0 : 1, transition: "opacity 180ms" }}
         >
           {hint}

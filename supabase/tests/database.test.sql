@@ -1,7 +1,31 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(25);
+select extensions.plan(30);
+
+select extensions.is(
+  (select count(*)::integer from public.quests where key in (
+    'obj-apple', 'obj-banana', 'obj-chair', 'obj-laptop', 'obj-remote',
+    'obj-clock', 'obj-scissors', 'obj-toothbrush', 'obj-teddy-bear'
+  )),
+  9,
+  'additional curated object quests are seeded'
+);
+select extensions.ok(
+  (select bool_and(
+    (validator_config->>'consensus')::integer = 3
+    and (validator_config->>'minPalmSpan')::numeric = 0.06
+  ) from public.quests where kind = 'fingers'),
+  'finger quests use the tolerant three-frame geometry contract'
+);
+select extensions.ok(
+  (select bool_and(
+    (validator_config->>'consensus')::integer = 3
+    and (validator_config->>'minArea')::numeric = 0.025
+    and (validator_config->>'minRegionArea')::numeric = 0.015
+  ) from public.quests where kind = 'color'),
+  'color quests accept a small coherent object region'
+);
 
 insert into auth.users (id, aud, role, email)
 values
@@ -178,6 +202,33 @@ select extensions.lives_ok(
     '{}'::text[]
   )$$,
   'turn can be prepared after the penalty-free retry'
+);
+select extensions.is(
+  (
+    public.prepare_turn(
+      '22222222-2222-4222-8222-222222222222',
+      '11111111-1111-4111-8111-111111111111',
+      3::smallint,
+      '{}'::text[]
+    )->>'turnId'
+  )::uuid,
+  (
+    select id from public.turns
+    where game_id = '22222222-2222-4222-8222-222222222222'
+      and player_id = '11111111-1111-4111-8111-111111111111'
+      and round = 3 and status = 'prepared'
+  ),
+  'duplicate prepare returns the existing open turn'
+);
+select extensions.is(
+  (
+    select count(*)::integer from public.turns
+    where game_id = '22222222-2222-4222-8222-222222222222'
+      and player_id = '11111111-1111-4111-8111-111111111111'
+      and round = 3 and status in ('prepared', 'active')
+  ),
+  1,
+  'duplicate prepare never creates a second open turn'
 );
 reset role;
 select extensions.is(

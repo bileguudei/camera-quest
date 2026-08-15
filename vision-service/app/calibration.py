@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import Counter
 
@@ -26,7 +27,14 @@ class CalibrationService:
         self._signer = signer
 
     async def calibrate(self, frames: list[Frame], subject: str) -> tuple[str, list[str]]:
-        detections = await self._detector.detect_batch(frames)
+        # GPU object inference and the independent CPU baselines can run at the
+        # same time. Keeping them serial made every handoff pay both latencies.
+        detections, color_ratios, neutral_smile, hand_present = await asyncio.gather(
+            self._detector.detect_batch(frames),
+            asyncio.to_thread(self._color_baseline, frames),
+            asyncio.to_thread(self._smile_baseline, frames),
+            asyncio.to_thread(self._hand_presence, frames),
+        )
         class_counts = Counter(
             detection.label
             for frame in detections
@@ -34,14 +42,6 @@ class CalibrationService:
             if detection.confidence >= 0.65
         )
         background = sorted(label for label, count in class_counts.items() if count >= 3)
-        color_ratios = {
-            color: sum(color_ratio(frame, color) for frame in frames) / len(frames)
-            for color in HSV_RANGES
-        }
-        smile_scores = [self._face.smile_score(frame) for frame in frames]
-        valid_smiles = [score for score in smile_scores if score is not None]
-        neutral_smile = sum(valid_smiles) / len(valid_smiles) if valid_smiles else 0.0
-        hand_present = any(self._hands.analyze(frame) for frame in frames)
         claims = CalibrationClaims(
             sub=subject,
             exp=int(time.time()) + 600,
@@ -51,3 +51,18 @@ class CalibrationService:
             hand_present=hand_present,
         )
         return self._signer.sign(claims), background
+
+    @staticmethod
+    def _color_baseline(frames: list[Frame]) -> dict[str, float]:
+        return {
+            color: sum(color_ratio(frame, color) for frame in frames) / len(frames)
+            for color in HSV_RANGES
+        }
+
+    def _smile_baseline(self, frames: list[Frame]) -> float:
+        smile_scores = [self._face.smile_score(frame) for frame in frames]
+        valid_smiles = [score for score in smile_scores if score is not None]
+        return sum(valid_smiles) / len(valid_smiles) if valid_smiles else 0.0
+
+    def _hand_presence(self, frames: list[Frame]) -> bool:
+        return any(self._hands.analyze(frame) for frame in frames)

@@ -1,5 +1,5 @@
 /** Generated from Supabase schema. Do not edit by hand.
- * schema-sha256: 021f0422d98626d39098e121b5ac3f3b9fd0e6ae7a9c79148debe41fa2744adb
+ * schema-sha256: 774f50614ea4983185b0da78365eced9736f50cad4d124bde2d8de993898d66e
  */
 
 export type Json =

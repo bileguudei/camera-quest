@@ -7,8 +7,8 @@
 - [ ] Python Ruff, strict mypy, pytest, and OpenAPI drift check
 - [ ] `supabase db reset` and `supabase test db`
 - [ ] Edge command schema/auth tests
-- [ ] RF-DETR TensorRT artifact checksum verified on T4
-- [ ] TensorRT output smoke-compared with the same RF-DETR PyTorch weights
+- [ ] RF-DETR ONNX artifact checksum and CUDA provider verified on T4
+- [ ] ONNX CUDA output smoke-compared with the same RF-DETR PyTorch weights
 
 ## Live camera matrix
 

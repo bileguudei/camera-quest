@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "npm:zod@4";
 import { commandSchema } from "./schema.ts";
 import { bearerToken, supabasePublicKey } from "./requestPolicy.ts";
+import { headersFor } from "./corsPolicy.ts";
 
 const allowedOrigins = new Set(
   (Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "http://localhost:3000")
@@ -10,22 +11,16 @@ const allowedOrigins = new Set(
     .filter(Boolean),
 );
 
-const headersFor = (origin: string | null) => ({
-  "Access-Control-Allow-Origin": origin && allowedOrigins.has(origin) ? origin : "null",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Vary": "Origin",
-  "Content-Type": "application/json",
-  "Cache-Control": "no-store",
-});
-
 const json = (origin: string | null, body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: headersFor(origin) });
+  new Response(JSON.stringify(body), { status, headers: headersFor(origin, allowedOrigins) });
 
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin");
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: allowedOrigins.has(origin ?? "") ? 204 : 403, headers: headersFor(origin) });
+    return new Response(null, {
+      status: allowedOrigins.has(origin ?? "") ? 204 : 403,
+      headers: headersFor(origin, allowedOrigins),
+    });
   }
   if (request.method !== "POST" || (origin && !allowedOrigins.has(origin))) {
     return json(origin, { code: "INVALID_REQUEST" }, 403);

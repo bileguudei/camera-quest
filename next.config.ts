@@ -23,6 +23,10 @@ function environmentAliases(production: boolean, absolute = false) {
 }
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  typescript: {
+    tsconfigPath: process.env.NEXT_DIST_DIR === ".next-e2e" ? "tsconfig.e2e.json" : "tsconfig.json",
+  },
   allowedDevOrigins: ["127.0.0.1"],
   turbopack: {
     root: process.cwd(),

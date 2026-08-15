@@ -152,7 +152,14 @@ export function useGame<T>(selector: (state: GameView) => T): T {
             calibrationToken: calibration.token,
           });
         } catch (error) {
-          actor.send({ type: "TURN_PREPARE_FAILED", code: toAppError(error).code });
+          const appError = toAppError(error);
+          if (process.env.NODE_ENV === "development") {
+            const cause = error instanceof Error ? `${error.name} — ${error.message}` : typeof error;
+            console.error(
+              `Camera Quest prepare-turn failed: ${appError.code} — ${appError.message}; cause: ${cause}`,
+            );
+          }
+          actor.send({ type: "TURN_PREPARE_FAILED", code: appError.code });
         }
       },
       preparationFailed: (code) => actor.send({ type: "TURN_PREPARE_FAILED", code }),
@@ -163,7 +170,14 @@ export function useGame<T>(selector: (state: GameView) => T): T {
           const active = await repository.activateTurn(context.preparedTurn.turnId);
           actor.send({ type: "TURN_ACTIVATED", active });
         } catch (error) {
-          actor.send({ type: "TURN_PREPARE_FAILED", code: toAppError(error).code });
+          const appError = toAppError(error);
+          if (process.env.NODE_ENV === "development") {
+            const cause = error instanceof Error ? `${error.name} — ${error.message}` : typeof error;
+            console.error(
+              `Camera Quest turn activation failed: ${appError.code} — ${appError.message}; cause: ${cause}`,
+            );
+          }
+          actor.send({ type: "TURN_PREPARE_FAILED", code: appError.code });
         }
       },
       acceptOutcome: (outcome) => actor.send({ type: "TURN_RESOLVED", outcome }),

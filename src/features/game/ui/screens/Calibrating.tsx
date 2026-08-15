@@ -8,6 +8,7 @@ import { useCameraContext } from "@/features/camera/CameraProvider";
 import { useGame } from "@/features/game/application/useGame";
 import { getGameRepository } from "@/features/game/infrastructure/createGameRepository";
 import { calibrate } from "@/features/vision/visionClient";
+import { toAppError } from "@/shared/errors/appError";
 
 export function Calibrating() {
   const facing = useGame((state) => state.cameraFacing);
@@ -15,31 +16,63 @@ export function Calibrating() {
   const local = useGame((state) => state.backendMode === "local");
   const prepareTurn = useGame((state) => state.prepareTurn);
   const preparationFailed = useGame((state) => state.preparationFailed);
-  const { stream } = useCameraContext();
+  const { stream, retry } = useCameraContext();
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const started = useRef(false);
+  const prepareTurnRef = useRef(prepareTurn);
+  const preparationFailedRef = useRef(preparationFailed);
+  const retryCameraRef = useRef(retry);
+  const frameRetryUsedRef = useRef(false);
 
   useEffect(() => {
-    if (started.current || (!demo && !videoRef.current)) return;
-    started.current = true;
+    prepareTurnRef.current = prepareTurn;
+    preparationFailedRef.current = preparationFailed;
+    retryCameraRef.current = retry;
+  }, [preparationFailed, prepareTurn, retry]);
+
+  useEffect(() => {
+    if (!demo && (!stream || !videoRef.current)) return;
     const controller = new AbortController();
 
     const run = async () => {
       if (local || demo) {
-        await prepareTurn({ token: "local-calibration-token", backgroundClasses: [] });
+        await prepareTurnRef.current({
+          token: "local-calibration-token",
+          backgroundClasses: [],
+        });
         return;
       }
       const accessToken = await getGameRepository().getAccessToken();
       const result = await calibrate(videoRef.current!, accessToken, controller.signal);
-      await prepareTurn({
+      await prepareTurnRef.current({
         token: result.calibrationToken,
         backgroundClasses: result.backgroundClasses,
       });
     };
 
-    void run().catch(() => preparationFailed("VISION_UNAVAILABLE"));
+    void run().catch((error: unknown) => {
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      const appError = toAppError(error);
+      if (appError.code === "INVALID_FRAME" && !frameRetryUsedRef.current) {
+        frameRetryUsedRef.current = true;
+        retryCameraRef.current();
+        return;
+      }
+      if (process.env.NODE_ENV === "development") {
+        const cause = error instanceof Error ? `${error.name} — ${error.message}` : typeof error;
+        // Metadata only: never log captured frames, tokens, or response bodies.
+        console.error(
+          `Camera Quest turn preparation failed: ${appError.code} — ${appError.message}; cause: ${cause}`,
+        );
+      }
+      preparationFailedRef.current(appError.code);
+    });
     return () => controller.abort();
-  }, [demo, local, preparationFailed, prepareTurn, stream]);
+  }, [demo, local, stream]);
 
   return (
     <Screen padding="none" backdrop={false}>

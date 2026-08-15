@@ -9,6 +9,7 @@ import { Screen, ScreenFooter } from "@/features/game/ui/components/Screen";
 import { mn } from "@/content/mn";
 import { useGame } from "@/features/game/application/useGame";
 import { PLAYER_COLOR_HEX } from "@/features/game/domain/config";
+import { handoffErrorMessage } from "@/features/game/domain/errorMessages";
 
 export function PlayerHandoff() {
   const player = useGame((state) => state.currentPlayer());
@@ -40,7 +41,7 @@ export function PlayerHandoff() {
         <p className="text-base text-ink-3 sm:text-lg">{mn.turn.handOver}</p>
         {errorCode && (
           <p role="alert" className="max-w-sm rounded-full bg-warn/15 px-4 py-2 text-sm font-bold text-warn">
-            Таних систем түр тасарсан. Энэ ээлж оноонд нөлөөлөхгүй, дахин оролдоно уу.
+            {handoffErrorMessage(errorCode)}
           </p>
         )}
       </motion.div>

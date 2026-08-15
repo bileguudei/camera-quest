@@ -15,7 +15,7 @@ class SequenceReplay(Exception):
 class TurnRateLimiter:
     """Container-local fast rejection; the DB unique key is the global replay guard."""
 
-    def __init__(self, max_requests: int = 3, window_seconds: float = 2.0) -> None:
+    def __init__(self, max_requests: int = 5, window_seconds: float = 2.0) -> None:
         self._max_requests = max_requests
         self._window = window_seconds
         self._requests: dict[str, deque[float]] = defaultdict(deque)

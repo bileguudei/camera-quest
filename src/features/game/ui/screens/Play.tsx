@@ -24,7 +24,6 @@ import type { TurnOutcome } from "@/features/game/domain/types";
 import { useVisionSession } from "@/features/vision/useVisionSession";
 import type { VisionOutcome } from "@/features/vision/visionTypes";
 import { remainingFromDeadline } from "@/features/game/domain/turnClock";
-import { ROI_CSS_SIZE } from "@/features/camera/roi";
 
 type Ending = { kind: "success"; timeMs: number; points: number } | { kind: "timeout" } | null;
 
@@ -69,7 +68,14 @@ export function Play() {
       .then((token) => {
         if (alive) setAccessToken(token);
       })
-      .catch(reportSystemError);
+      .catch((error: unknown) => {
+        if (!alive) return;
+        if (process.env.NODE_ENV === "development") {
+          const cause = error instanceof Error ? `${error.name} — ${error.message}` : typeof error;
+          console.error(`Camera Quest play token failed: ${cause}`);
+        }
+        reportSystemError();
+      });
     return () => {
       alive = false;
     };
@@ -209,7 +215,7 @@ export function Play() {
           <ChallengeCard challenge={challenge} />
         </div>
 
-        {/* ── Aiming square + detection overlay ─────────────────────────── */}
+        {/* ── Full-camera recognition frame + detection overlay ────────── */}
         {!ending && (
           <TargetFrame
             state={
@@ -229,8 +235,7 @@ export function Play() {
 
         <div
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: ROI_CSS_SIZE, aspectRatio: "1" }}
+          className="pointer-events-none absolute inset-0 z-10"
         >
           {!ending &&
             vision.detections.map((d) => (

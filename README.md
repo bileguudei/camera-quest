@@ -1,107 +1,261 @@
-# Camera Quest Production v1
+# Camera Quest
 
-Нэг төхөөрөмж дээр 1–6 хүн ээлжилж, 5 раунд тоглох camera game. Оноо, XP, level, streak, achievement-ийг Supabase transaction тооцно; browser score өөрчлөх эрхгүй. Камерын frame зөвхөн Modal vision request-ийн хугацаанд memory-д байна — database, object storage, application log, Sentry-д хадгалахгүй.
+Camera Quest бол нэг утас эсвэл компьютерийн камерыг ашиглан 1–6 хүн ээлжилж тоглодог web тоглоом.
+Тоглогч бүр 5 раунд тоглоно. Нэг ээлж 30 секунд бөгөөд камерын өмнө даалгавраа биелүүлэхэд AI
+таньж, оноо болон XP-г server талд бодно.
 
-Архитектур болон өргөтгөх заавар: [docs/architecture.md](docs/architecture.md). Release шалгуур: [docs/release-checklist.md](docs/release-checklist.md).
+Жишээ даалгавар: **лонх ол**, **2 хуруу харуул**, **инээмсэглэ**, **улаан зүйл ол**.
 
-## Local frontend
+## Одоогийн төлөв (2026-08-15)
 
-Node.js 22+ ашиглана.
+| Хэсэг | Төлөв |
+| --- | --- |
+| Тоглоомын UI, mobile responsive flow | Бэлэн |
+| 1–6 тоглогч, 5 раунд, 30 секундийн timer | Бэлэн |
+| Random quest, оноо, XP, level, streak, achievement | Бэлэн |
+| Supabase database, RLS, Edge Function | Hosted project дээр ажиллаж байгаа |
+| Object, өнгө, smile танилт | Modal staging дээр ажиллаж байгаа |
+| 1–5 хуруу танилт | Хамгийн сүүлийн засвар staging-д deploy болсон; бодит төхөөрөмжийн олон нөхцөл дээр дахин шалгана |
+| Vercel production URL, custom domain | Хийгдээгүй; хамгийн сүүлд холбоно |
+| Production release gate | Бүрэн хаагдаагүй; live camera matrix үлдсэн |
 
-```bash
-npm ci
-npm run dev
+Одоогийн даалгаврууд:
+
+- Object: лонх, аяга, ном, утас, үүргэвч, цүнх, keyboard, mouse, алим, гадил, сандал,
+  laptop, удирдлага, цаг, хайч, шүдний сойз, тоглоомон баавгай.
+- Хуруу: 1–5.
+- Өнгө: улаан, цэнхэр, ногоон, шар.
+- Инээмсэглэл.
+
+Object танилтад GPU дээр RF-DETR-L ONNX, хуруу/инээмсэглэлд MediaPipe, өнгөнд OpenCV ашиглаж
+байна. Browser дотор AI model ажиллахгүй. Gemini fallback болон semantic quest одоогоор унтраалттай.
+Sentry заавал биш бөгөөд DSN өгөөгүй үед ажиллахгүй.
+
+## Маш энгийн архитектур
+
+```text
+Browser (Next.js + camera)
+        │
+        ├── тоглоом, timer, score ──> Supabase Edge Function + Postgres
+        │
+        └── түр зуурын camera frame ──> Modal GPU vision service
 ```
 
-Development server дээр environment өгөөгүй үед local repository болон fake vision adapter сонгогдоно. Production build environment дутуу бол fake game рүү шилжихгүй, game start хаагдана. Dev shortcut хэрэгтэй бол `.env.local`-д:
+- Browser оноо, XP-г өөрөө нэмэх эрхгүй. Supabase transaction эцсийн дүнг бодно.
+- Camera frame зөвхөн таних request-ийн үед memory-д байна.
+- Frame-ийг Supabase, Modal storage эсвэл application log-д хадгалахгүй.
+- Нэг төхөөрөмж дээр anonymous device account үүсэж, нэртэй local player profile-ууд хадгалагдана.
+
+## Clone хийгээд хамгийн хурдан ажиллуулах
+
+### 1. Хэрэгтэй зүйлс
+
+- [Git](https://git-scm.com/)
+- [Node.js 22 LTS](https://nodejs.org/)
+- Chrome browser
+- Camera-тай утас эсвэл компьютер
+
+Node суусан эсэхээ шалгах:
+
+```bash
+node -v
+npm -v
+```
+
+`node -v` нь `v22...` гэж гарвал зөв.
+
+### 2. Project-оо татах
+
+```bash
+git clone https://github.com/bileguudei/camera-quest.git
+cd camera-quest
+npm ci
+```
+
+### 3A. Зөвхөн UI болон тоглоомын flow шалгах
+
+Cloud account, Supabase, Modal хэрэггүй. Project-ийн root дотор `.env.local` файл үүсгээд зөвхөн:
 
 ```dotenv
 NEXT_PUBLIC_DEV_CONTROLS_ENABLED=true
 ```
 
-Production-like frontend-д [.env.example](.env.example)-ийг загвар болгоно. `SUPABASE_SECRET_KEY`, Gemini key, calibration secret-ийг `NEXT_PUBLIC_*` хувьсагчид хэзээ ч хийж болохгүй.
+Дараа нь:
 
-## Local Supabase
+```bash
+npm run dev
+```
 
-Docker ажиллаж байх шаардлагатай.
+[http://localhost:3000](http://localhost:3000)-ийг Chrome-оор нээнэ. Энэ горим local development
+adapter ашиглах тул жинхэнэ AI танихгүй. Тоглож байх үед зүүн талын dev товчоор `Success` эсвэл
+`Timeout` өгч бүх screen flow-г шалгана.
+
+### 3B. Жинхэнэ camera + cloud AI шалгах
+
+Team project owner-оос дараах **browser-safe** 3 утгыг авна:
+
+- Supabase project URL
+- Supabase publishable key
+- Modal vision endpoint URL
+
+Root-ийн `.env.local` файлд:
+
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+NEXT_PUBLIC_VISION_URL=https://YOUR_MODAL_ENDPOINT
+NEXT_PUBLIC_VISION_ENABLED=true
+NEXT_PUBLIC_DEV_CONTROLS_ENABLED=false
+NEXT_PUBLIC_SENTRY_DSN=
+```
+
+Дараа нь server-ээ дахин асаана:
+
+```bash
+npm run dev
+```
+
+Chrome дээр [http://localhost:3000](http://localhost:3000)-ийг нээгээд:
+
+1. 1–6 тоглогчийн нэрийг оруулна.
+2. Camera permission дээр `Allow` дарна.
+3. `AI model бэлэн` болохыг хүлээнэ. Удаан ашиглаагүй үед cold start хэдэн секундээс удаан байж болно.
+4. `Тоглоом эхлүүлэх` → тухайн тоглогч `Бэлэн` гэж дарна.
+5. Calibration үед гараа/объектоо харуулахгүй, камераа тогтвортой барина.
+6. Quest гарсны дараа хайж буй зүйл эсвэл гараа camera-ийн бүтэн хүрээнд тод харуулна.
+
+> `SUPABASE_SECRET_KEY`, Modal token, Gemini key, calibration secret-ийг `.env.local`-ийн
+> `NEXT_PUBLIC_*` хувьсагчид хэзээ ч хийж болохгүй.
+
+## Түгээмэл асуудал
+
+### Camera асахгүй байна
+
+- Chrome → Site settings → Camera → `Allow` болгоно.
+- Camera ашиглаж байгаа Zoom/Meet зэрэг app-ийг хаана.
+- Page-ээ refresh хийнэ.
+- Утаснаас local компьютер рүү IP address-аар орох үед camera HTTPS шаардаж болно. Эхний тестээ
+  camera-тай компьютерийн `localhost:3000` дээр хийх нь хамгийн амар.
+
+### `AI model ачаалж байна` дээр удаад байна
+
+- Internet холболтоо шалгана.
+- Modal GPU cold start хийж байж болно; Camera Check өөрөө дахин оролдоно.
+- Browser console-ийн HTTP status болон Modal log-ийг шалгана.
+- `NEXT_PUBLIC_VISION_URL` төгсгөлдөө илүү `/` эсвэл хуучин endpoint агуулаагүйг шалгана.
+
+### Backend-тэй холбогдож чадсангүй
+
+- `.env.local`-ийн Supabase URL болон publishable key хоёулаа зөв эсэхийг шалгана.
+- Env өөрчилсний дараа `npm run dev`-ийг stop хийгээд дахин асаана.
+- `service_role`/secret key-г browser-д ашиглахгүй.
+
+## Developer setup
+
+Энэ хэсэг нь database эсвэл AI backend өөрчлөх хүнд зориулагдсан. Зөвхөн frontend ажиллуулах бол
+дээрх quick start хангалттай.
+
+### Local Supabase
+
+Нэмэлтээр Docker Desktop болон [Supabase CLI](https://supabase.com/docs/guides/local-development) хэрэгтэй.
 
 ```bash
 supabase start
 supabase db reset
 supabase test db
-deno test --allow-env supabase/functions/game-api/index_test.ts
+deno test --allow-env --frozen supabase/functions/game-api/index_test.ts
 supabase functions serve game-api --env-file supabase/.env.local
 ```
 
-`supabase status`-ын local URL болон publishable key-г `.env.local`-ийн `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`-д хийнэ. Anonymous sign-in [supabase/config.toml](supabase/config.toml)-д идэвхтэй.
+`supabase status`-ын local URL болон publishable key-г root `.env.local`-д хийнэ. Modal cloud нь
+таны `localhost` Supabase руу шууд орж чадахгүй учраас жинхэнэ end-to-end AI тестэд hosted Supabase
+project ашиглах нь хамгийн энгийн.
 
-## Vision service
+Hosted Supabase migration deploy:
 
-Production Modal image Python 3.11 ашигладаг. Core test suite GPU/model татахгүй.
+```bash
+supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
+supabase secrets set CORS_ALLOWED_ORIGINS=http://localhost:3000,https://YOUR_DOMAIN
+supabase functions deploy game-api --use-api
+```
+
+### Vision service / Modal
+
+Python service нь Python 3.11 ашиглана. Core test нь GPU model татахгүй.
 
 ```bash
 cd vision-service
 python3.11 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-.venv/bin/ruff check app tests scripts
-.venv/bin/mypy app tests scripts
-.venv/bin/pytest
-.venv/bin/python scripts/generate_openapi.py --check
+.venv/bin/python -m ruff check app tests scripts modal_app.py
+.venv/bin/python -m mypy app tests scripts
+.venv/bin/python -m pytest
 ```
 
-Modal CLI-г тусад нь суулгаад secret үүсгэнэ. Secret-ийн key-үүд
-[vision-service/.env.modal.example](vision-service/.env.modal.example)-д бий. Хувийн Modal
-account-ыг солихгүйгээр team workspace profile болон тусгаарласан `staging`/`production`
-environment үүсгэх бүрэн дарааллыг [Modal deployment runbook](docs/modal-deployment.md)-оос дагана.
+Team Modal workspace-д deploy хийхдээ:
 
 ```bash
-python3.11 -m pip install 'modal>=1,<2'
+python3.11 -m pip install 'modal>=1.4.3,<2'
 modal token new --profile camera-quest-team --activate
-modal run --env staging modal_app.py::build_tensorrt_artifact
+cd vision-service
+modal run --env staging modal_app.py::build_model_artifact
 modal deploy --env staging modal_app.py
 ```
 
-`build_tensorrt_artifact` нь official RF-DETR-L pretrained weight-ээс T4-д зориулсан fixed-batch-5 FP16 engine үүсгэж, checksum manifest-тай Modal Volume-д хадгална. Production deploy-оос өмнө энэ command амжилттай дууссан байх ёстой.
+Secret-ийн нэр болон бүрэн setup-ийг [Modal deployment runbook](docs/modal-deployment.md)-оос харна.
+RF-DETR-L TensorRT export parity gate даваагүй тул одоогийн serving path ONNX Runtime CUDA ашигладаг.
 
-Sentry заавал биш. `NEXT_PUBLIC_SENTRY_DSN` болон Modal secret-ийн `SENTRY_DSN` хоосон үед
-frontend болон vision service event илгээхгүй; үндсэн game/vision flow өөрчлөгдөхгүй.
+## Шалгах командууд
 
-## Generated contracts
-
-Generated file-ийг гараар засахгүй.
-
-```bash
-# FastAPI contract
-cd vision-service
-.venv/bin/python scripts/generate_openapi.py
-cd ..
-npm run generate:vision
-
-# Local Supabase-аас (эсвэл project ref өгвөл linked project-оос) database type
-npm run generate:database
-SUPABASE_PROJECT_REF=your_project_ref npm run generate:database
-
-npm run check:contracts
-```
-
-CI нь FastAPI → `openapi.json` → TypeScript client, мөн migrations → `database.types.ts` drift-ийг тус тус шалгана.
-
-## Verification
+Frontend, TypeScript, unit test, generated contract, production build:
 
 ```bash
 npm run verify
-npm run test:e2e
-npm run test:python
 ```
 
-`npm run test:supabase` болон `npm run test:edge` нь Docker/Deno суусан орчинд тусад нь ажиллана. Local environment-д Docker байхгүй бол Supabase reset/pgTAP-ийг CI эсвэл staging project дээр заавал ажиллуулна.
+Нэмэлт test-үүд:
 
-## Staging → production
+```bash
+npm run test:e2e       # browser flow
+npm run test:python    # Python validator/API
+npm run test:supabase  # Docker ажиллаж байх ёстой
+npm run test:edge      # Deno хэрэгтэй
+```
 
-1. Supabase project-оо Seoul (`ap-northeast-2`) region-д үүсгэж `supabase link --project-ref ...`, `supabase db push` ажиллуулна.
-2. Edge secret `CORS_ALLOWED_ORIGINS`-г staging/production domain-аар тохируулаад `supabase functions deploy game-api --use-api` хийнэ. Opaque publishable key ашигладаг тул `verify_jwt=false`; function нь bearer access token-ийг `auth.getUser()`-аар шалгаж owner identity-г баталгаажуулна.
-3. Modal staging secret үүсгэж TensorRT artifact build, checksum smoke, `modal deploy` хийнэ.
-4. Vercel project environment-д browser-safe хувьсагчдыг тохируулж preview deploy дээр E2E/manual camera matrix ажиллуулна.
-5. Release checklist ногоон бол production Supabase → Modal → Vercel дарааллаар гаргана.
+## Folder бүтэц
 
-Энэ repository deploy command-ыг автоматаар ажиллуулахгүй; production credential болон environment promotion нь хүний баталгаатай release алхам байна.
+```text
+src/                    Next.js frontend, game/camera/vision feature-үүд
+supabase/migrations/    Database schema, RLS, score/XP transaction
+supabase/functions/     Authenticated game-api Edge Function
+vision-service/app/     FastAPI, validators, security, model adapters
+vision-service/tests/   Python test-үүд
+e2e/                    Playwright browser test
+docs/                   Architecture, Modal deploy, release checklist
+```
+
+Generated файлуудыг гараар засахгүй:
+
+- `src/generated/database.types.ts`
+- `src/generated/vision-api.ts`
+- `vision-service/openapi.json`
+
+## Production-д гаргахын өмнө
+
+Одоогийн hosted Supabase болон Modal staging нь development/live camera test-д бэлэн. Харин custom
+domain-тай Vercel production release хийхийн өмнө [release checklist](docs/release-checklist.md)-ийн
+accuracy, false-pass, latency, privacy шалгууруудыг бодит төхөөрөмжүүд дээр бүрэн давсан байх ёстой.
+
+Дэлгэрэнгүй:
+
+- [Architecture ба шинэ quest/validator нэмэх заавар](docs/architecture.md)
+- [Modal staging/production deployment](docs/modal-deployment.md)
+- [Production release checklist](docs/release-checklist.md)
+
+## Security санамж
+
+- `.env.local`, `.env.modal.*`, token, secret key-г Git-д commit хийхгүй.
+- `SUPABASE_SECRET_KEY` зөвхөн Edge/Modal server талд байна.
+- Browser зөвхөн Supabase publishable key ашиглана.
+- Production camera frame, screenshot, raw image хадгалахгүй.

@@ -51,3 +51,15 @@ class CalibrationResponse(ApiModel):
 class HealthResponse(ApiModel):
     status: Literal["ok"] = "ok"
     model_version: str = Field(alias="modelVersion")
+
+
+class StreamAuthMessage(ApiModel):
+    type: Literal["authenticate"]
+    access_token: str = Field(alias="accessToken", min_length=1)
+    turn_id: str = Field(alias="turnId", min_length=1)
+    calibration_token: str = Field(alias="calibrationToken", min_length=16)
+
+
+class StreamBatchMessage(ApiModel):
+    type: Literal["batch"]
+    sequence_no: int = Field(alias="sequenceNo", ge=1)

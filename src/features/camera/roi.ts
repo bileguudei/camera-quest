@@ -1,21 +1,13 @@
 import type { DetectionBox } from "@/features/vision/visionTypes";
 
-export const ROI_SCALE = 0.62;
-export const ROI_CSS_SIZE = `min(${ROI_SCALE * 100}vw, ${ROI_SCALE * 100}dvh)`;
-
-export function roiRect(width: number, height: number): DetectionBox {
-  const side = Math.min(width, height) * ROI_SCALE;
-  return {
-    x: (width - side) / 2 / width,
-    y: (height - side) / 2 / height,
-    w: side / width,
-    h: side / height,
-  };
+/** Recognition covers every pixel visible inside the camera surface. */
+export function fullFrameRect(): DetectionBox {
+  return { x: 0, y: 0, w: 1, h: 1 };
 }
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 
-/** Converts the visible object-cover ROI to uncropped source-video space. */
+/** Converts the full visible object-cover surface to its source-video crop. */
 export function roiToVideo(roi: DetectionBox, video: HTMLVideoElement): DetectionBox {
   const videoWidth = video.videoWidth;
   const videoHeight = video.videoHeight;

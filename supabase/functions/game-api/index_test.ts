@@ -1,6 +1,16 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import { bearerToken, supabasePublicKey } from "./requestPolicy.ts";
 import { commandSchema } from "./schema.ts";
+import { headersFor } from "./corsPolicy.ts";
+
+Deno.test("allows the Supabase SDK region header in browser preflights", () => {
+  const headers = headersFor("http://localhost:3000", new Set(["http://localhost:3000"]));
+  const allowedHeaders = headers["Access-Control-Allow-Headers"]
+    .split(",")
+    .map((header) => header.trim());
+
+  assertEquals(allowedHeaders.includes("x-region"), true);
+});
 
 Deno.test("rejects an unbounded player roster", () => {
   const result = commandSchema.safeParse({

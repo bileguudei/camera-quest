@@ -19,6 +19,11 @@ const fastDevelopmentFlow =
 const MODEL_MS = fastDevelopmentFlow ? 30 : 950;
 /** Breathing room after the model lands, so step 3 isn't a flash. */
 const WARMUP_MS = fastDevelopmentFlow ? 30 : 700;
+const WARMUP_RETRY_BASE_MS = fastDevelopmentFlow ? 50 : 1_500;
+const WARMUP_RETRY_MAX_MS = fastDevelopmentFlow ? 100 : 6_000;
+
+export const warmupRetryDelay = (attempt: number) =>
+  Math.min(WARMUP_RETRY_BASE_MS * 2 ** Math.min(attempt, 3), WARMUP_RETRY_MAX_MS);
 
 export function CameraCheck() {
   const facing = useGame((s) => s.cameraFacing);
@@ -38,6 +43,8 @@ export function CameraCheck() {
 
   const [modelDone, setModelDone] = useState(false);
   const [readyDone, setReadyDone] = useState(false);
+  const [warmupAttempt, setWarmupAttempt] = useState(0);
+  const [warmupFailed, setWarmupFailed] = useState(false);
 
   // The checklist only ever counts while the camera is live.
   const modelOk = cameraOk && modelDone;
@@ -58,19 +65,32 @@ export function CameraCheck() {
     }
 
     let alive = true;
+    let retryTimer = 0;
+    const controller = new AbortController();
     void getGameRepository()
       .getAccessToken()
-      .then((token) => warmVisionService(token))
+      .then((token) => warmVisionService(token, controller.signal))
       .then(() => {
-        if (alive) setModelDone(true);
+        if (alive) {
+          setWarmupFailed(false);
+          setModelDone(true);
+        }
       })
-      .catch(() => {
-        if (alive) setModelDone(false);
+      .catch((error: unknown) => {
+        if (!alive || (error instanceof DOMException && error.name === "AbortError")) return;
+        setWarmupFailed(true);
+        setModelDone(false);
+        retryTimer = window.setTimeout(
+          () => setWarmupAttempt((attempt) => attempt + 1),
+          warmupRetryDelay(warmupAttempt),
+        );
       });
     return () => {
       alive = false;
+      controller.abort();
+      window.clearTimeout(retryTimer);
     };
-  }, [backendMode, demo]);
+  }, [backendMode, demo, warmupAttempt]);
 
   useEffect(() => {
     if (!cameraOk || !modelDone) return;
@@ -83,6 +103,7 @@ export function CameraCheck() {
 
   const allReady = cameraOk && modelOk && readyOk;
   const backendUnavailable = backendMode === "unavailable";
+  const showWarmupFailure = warmupFailed && backendMode === "supabase" && !demo;
 
   const stateOf = (done: boolean, unlocked: boolean): StatusState =>
     done ? "done" : unlocked ? "active" : "pending";
@@ -212,7 +233,26 @@ export function CameraCheck() {
               ? "Local development adapter"
               : "Production backend тохируулагдаагүй"}
         </span>
+        {showWarmupFailure ? (
+          <button
+            type="button"
+            onClick={() => {
+              setWarmupFailed(false);
+              setWarmupAttempt((attempt) => attempt + 1);
+            }}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/40 px-2.5 py-1 text-xs font-bold text-accent transition hover:bg-accent/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+            Дахин
+          </button>
+        ) : null}
       </div>
+
+      {showWarmupFailure ? (
+        <p role="alert" className="mt-2 text-center text-sm font-bold text-warn">
+          AI түр ачаалалтай байна. Автоматаар дахин оролдож байна.
+        </p>
+      ) : null}
 
       {(gameError || backendUnavailable) && (
         <p role="alert" className="mt-2 text-center text-sm font-bold text-danger">

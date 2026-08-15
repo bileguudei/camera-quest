@@ -1,12 +1,20 @@
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 
+import cv2
 import httpx
+import numpy as np
 import pytest
 from fastapi import FastAPI
+from starlette.testclient import TestClient
 
 from app.api.main import create_app
+from app.models.contracts import VisionOutcome
+from app.models.supabase_gateway import GatewayUnavailable
+from app.models.turn import ActiveTurn, CalibrationClaims, QuestConfig
 from app.security.jwt_verifier import Principal
+from app.validators.base import Frame, ValidationResult
 
 
 class FakeJwt:
@@ -15,8 +23,19 @@ class FakeJwt:
 
 
 class FakeDetector:
+    def __init__(self) -> None:
+        self.warm_calls = 0
+
     async def warm(self) -> None:
-        return None
+        self.warm_calls += 1
+
+
+class FakeGateway:
+    def __init__(self) -> None:
+        self.warm_calls = 0
+
+    async def warm(self) -> None:
+        self.warm_calls += 1
 
 
 def make_app() -> FastAPI:
@@ -27,7 +46,12 @@ def make_app() -> FastAPI:
         sentry_dsn=None,
         environment="test",
     )
-    services = SimpleNamespace(settings=settings, jwt=FakeJwt(), detector=FakeDetector())
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
+        gateway=FakeGateway(),
+    )
     return create_app(cast(Any, services))
 
 
@@ -39,6 +63,71 @@ async def test_warmup_requires_authentication() -> None:
         response = await client.post("/v1/warmup")
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "UNAUTHORIZED"
+
+
+@pytest.mark.asyncio
+async def test_warmup_primes_model_and_supabase_connections() -> None:
+    detector = FakeDetector()
+    gateway = FakeGateway()
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=detector,
+        gateway=gateway,
+    )
+    app = create_app(cast(Any, services))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/warmup",
+            headers={"Authorization": "Bearer valid"},
+        )
+
+    assert response.status_code == 204
+    assert detector.warm_calls == 1
+    assert gateway.warm_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_warmup_maps_gpu_capacity_failure_to_retryable_service_error() -> None:
+    class CapacityLimitedDetector:
+        async def warm(self) -> None:
+            raise RuntimeError("gpu_capacity_unavailable")
+
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=CapacityLimitedDetector(),
+        gateway=FakeGateway(),
+    )
+    app = create_app(cast(Any, services))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/warmup",
+            headers={"Authorization": "Bearer valid"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "VISION_UNAVAILABLE"
 
 
 @pytest.mark.asyncio
@@ -71,3 +160,361 @@ async def test_body_limit_runs_before_frame_parsing() -> None:
         )
     assert response.status_code == 413
     assert response.json()["code"] == "INVALID_FRAME"
+
+
+@pytest.mark.asyncio
+async def test_validate_maps_supabase_outage_to_retryable_service_error() -> None:
+    class FakeSigner:
+        def verify(self, token: str, subject: str) -> object:
+            return object()
+
+    class FakeRateLimiter:
+        def check(self, turn_id: str, sequence_no: int) -> None:
+            return None
+
+    class UnavailableGateway:
+        async def get_active_turn(self, turn_id: str, owner_id: str) -> object:
+            raise GatewayUnavailable("supabase_status_401")
+
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
+        signer=FakeSigner(),
+        rate_limiter=FakeRateLimiter(),
+        gateway=UnavailableGateway(),
+    )
+    app = create_app(cast(Any, services))
+    files = [("frames", (f"{index}.jpg", b"frame", "image/jpeg")) for index in range(5)]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/validate",
+            headers={"Authorization": "Bearer valid", "Origin": "http://localhost:3000"},
+            data={
+                "turnId": "10000000-0000-4000-8000-000000000001",
+                "sequenceNo": "1",
+                "calibrationToken": "signed-calibration-token",
+            },
+            files=files,
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "VISION_UNAVAILABLE"
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+@pytest.mark.asyncio
+async def test_continue_verdict_does_not_depend_on_telemetry_write() -> None:
+    class FakeSigner:
+        def verify(self, token: str, subject: str) -> CalibrationClaims:
+            del token
+            return CalibrationClaims(sub=subject, exp=9_999_999_999)
+
+    class FakeRateLimiter:
+        def check(self, turn_id: str, sequence_no: int) -> None:
+            del turn_id, sequence_no
+
+    class ActiveGateway:
+        abort_calls = 0
+
+        async def get_active_turn(self, turn_id: str, owner_id: str) -> ActiveTurn:
+            return ActiveTurn(
+                id=turn_id,
+                game_id="20000000-0000-4000-8000-000000000001",
+                player_id="30000000-0000-4000-8000-000000000001",
+                owner_id=owner_id,
+                status="active",
+                started_at=datetime.now(UTC),
+                deadline_at=datetime.now(UTC) + timedelta(seconds=30),
+                quest=QuestConfig(
+                    id="40000000-0000-4000-8000-000000000001",
+                    key="fingers-2",
+                    kind="fingers",
+                    finger_count=2,
+                    validator_config={"consensus": 4},
+                ),
+            )
+
+        async def abort_turn(self, turn_id: str, reason: str) -> None:
+            del turn_id, reason
+            self.abort_calls += 1
+
+    class ContinueValidator:
+        version = "test-validator"
+
+        async def validate(
+            self,
+            frames: list[Frame],
+            quest: QuestConfig,
+            calibration: CalibrationClaims,
+        ) -> ValidationResult:
+            del frames, quest, calibration
+            return ValidationResult(
+                passed=False,
+                progress=0.5,
+                confidence=0.5,
+                reason="finger_consensus",
+            )
+
+    class FakeValidators:
+        def for_kind(self, kind: str) -> ContinueValidator:
+            del kind
+            return ContinueValidator()
+
+    class FailingAttemptSink:
+        calls = 0
+
+        async def submit(self, attempt: object) -> None:
+            del attempt
+            self.calls += 1
+            raise GatewayUnavailable("telemetry_queue_unavailable")
+
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    gateway = ActiveGateway()
+    attempts = FailingAttemptSink()
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
+        signer=FakeSigner(),
+        rate_limiter=FakeRateLimiter(),
+        gateway=gateway,
+        attempts=attempts,
+        validators=FakeValidators(),
+    )
+    app = create_app(cast(Any, services))
+    ok, encoded = cv2.imencode(".jpg", np.zeros((512, 512, 3), dtype=np.uint8))
+    assert ok
+    files = [
+        ("frames", (f"{index}.jpg", encoded.tobytes(), "image/jpeg")) for index in range(5)
+    ]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/validate",
+            headers={"Authorization": "Bearer valid"},
+            data={
+                "turnId": "10000000-0000-4000-8000-000000000001",
+                "sequenceNo": "1",
+                "calibrationToken": "signed-calibration-token",
+            },
+            files=files,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "continue"
+    assert attempts.calls == 1
+    assert gateway.abort_calls == 0
+
+
+class StreamSigner:
+    def verify(self, token: str, subject: str) -> CalibrationClaims:
+        del token
+        return CalibrationClaims(sub=subject, exp=9_999_999_999)
+
+
+class StreamRateLimiter:
+    def check(self, turn_id: str, sequence_no: int) -> None:
+        del turn_id, sequence_no
+
+
+class StreamGateway:
+    def __init__(self) -> None:
+        self.lookup_calls = 0
+        self.resolve_calls = 0
+
+    async def get_active_turn(self, turn_id: str, owner_id: str) -> ActiveTurn:
+        self.lookup_calls += 1
+        return ActiveTurn(
+            id=turn_id,
+            game_id="20000000-0000-4000-8000-000000000001",
+            player_id="30000000-0000-4000-8000-000000000001",
+            owner_id=owner_id,
+            status="active",
+            started_at=datetime.now(UTC),
+            deadline_at=datetime.now(UTC) + timedelta(seconds=30),
+            quest=QuestConfig(
+                id="40000000-0000-4000-8000-000000000001",
+                key="fingers-2",
+                kind="fingers",
+                finger_count=2,
+                validator_config={"consensus": 4},
+            ),
+        )
+
+    async def resolve_turn(
+        self,
+        turn_id: str,
+        sequence_no: int,
+        latency_ms: int,
+        confidence: float,
+        validator: str,
+        model_version: str,
+        validator_version: str,
+        reason: str | None,
+    ) -> VisionOutcome:
+        del sequence_no, latency_ms, confidence, validator, model_version, validator_version, reason
+        self.resolve_calls += 1
+        return VisionOutcome(
+            turn_id=turn_id,
+            elapsed_ms=400,
+            points=20,
+            xp=20,
+            total_score=20,
+            total_xp=20,
+            level=1,
+            streak=1,
+            unlocked_achievement_ids=[],
+        )
+
+    async def abort_turn(self, turn_id: str, reason: str) -> None:
+        del turn_id, reason
+
+
+class StreamAttempts:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def submit(self, attempt: object) -> None:
+        del attempt
+        self.calls += 1
+
+
+class StreamValidator:
+    version = "stream-test-v1"
+
+    def __init__(self, pass_on_four: bool) -> None:
+        self.pass_on_four = pass_on_four
+        self.frame_counts: list[int] = []
+
+    async def validate(
+        self,
+        frames: list[Frame],
+        quest: QuestConfig,
+        calibration: CalibrationClaims,
+    ) -> ValidationResult:
+        del quest, calibration
+        self.frame_counts.append(len(frames))
+        passed = self.pass_on_four and len(frames) >= 4
+        return ValidationResult(
+            passed=passed,
+            progress=1 if passed else 0.5,
+            confidence=1 if passed else 0.5,
+            reason="finger_consensus",
+        )
+
+
+class StreamValidators:
+    def __init__(self, validator: StreamValidator) -> None:
+        self.validator = validator
+
+    def for_kind(self, kind: str) -> StreamValidator:
+        assert kind == "fingers"
+        return self.validator
+
+
+def make_stream_app(
+    validator: StreamValidator,
+) -> tuple[FastAPI, StreamGateway, StreamAttempts]:
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    gateway = StreamGateway()
+    attempts = StreamAttempts()
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
+        signer=StreamSigner(),
+        rate_limiter=StreamRateLimiter(),
+        gateway=gateway,
+        attempts=attempts,
+        validators=StreamValidators(validator),
+    )
+    return create_app(cast(Any, services)), gateway, attempts
+
+
+def stream_auth_message() -> dict[str, str]:
+    return {
+        "type": "authenticate",
+        "accessToken": "valid",
+        "turnId": "10000000-0000-4000-8000-000000000001",
+        "calibrationToken": "signed-calibration-token",
+    }
+
+
+def jpeg_frame() -> bytes:
+    ok, encoded = cv2.imencode(".jpg", np.zeros((512, 512, 3), dtype=np.uint8))
+    assert ok
+    return encoded.tobytes()
+
+
+def test_stream_authenticates_and_loads_the_turn_only_once() -> None:
+    validator = StreamValidator(pass_on_four=False)
+    app, gateway, attempts = make_stream_app(validator)
+    frame = jpeg_frame()
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/v1/stream",
+            headers={"origin": "http://localhost:3000"},
+        ) as websocket:
+            websocket.send_json(stream_auth_message())
+            assert websocket.receive_json() == {"type": "ready"}
+            for sequence_no in (10, 11):
+                websocket.send_json({"type": "batch", "sequenceNo": sequence_no})
+                for _ in range(5):
+                    websocket.send_bytes(frame)
+                message = websocket.receive_json()
+                assert message["type"] == "verdict"
+                assert message["verdict"]["decision"] == "continue"
+
+    assert gateway.lookup_calls == 1
+    assert attempts.calls == 2
+    assert validator.frame_counts == [4, 5, 4, 5]
+
+
+def test_stream_can_pass_a_specialist_quest_after_four_frames() -> None:
+    validator = StreamValidator(pass_on_four=True)
+    app, gateway, _ = make_stream_app(validator)
+    frame = jpeg_frame()
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/v1/stream",
+            headers={"origin": "http://localhost:3000"},
+        ) as websocket:
+            websocket.send_json(stream_auth_message())
+            assert websocket.receive_json() == {"type": "ready"}
+            websocket.send_json({"type": "batch", "sequenceNo": 12})
+            for _ in range(4):
+                websocket.send_bytes(frame)
+            message = websocket.receive_json()
+
+    assert message["type"] == "verdict"
+    assert message["verdict"]["decision"] == "pass"
+    assert gateway.lookup_calls == 1
+    assert gateway.resolve_calls == 1
+    assert validator.frame_counts == [4]

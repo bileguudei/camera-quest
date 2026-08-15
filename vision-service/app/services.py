@@ -1,21 +1,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from app.calibration import CalibrationService
+from app.models.contracts import Detection
 from app.models.gemini_fallback import GeminiObjectFallback
 from app.models.mediapipe_analyzers import MediaPipeFaceAnalyzer, MediaPipeHandAnalyzer
-from app.models.remote_detector import ModalObjectDetector, RemoteWorker
 from app.models.supabase_gateway import SupabaseGateway
+from app.models.telemetry import AttemptTelemetrySink, InlineAttemptTelemetrySink
 from app.security.calibration_token import CalibrationTokenSigner
 from app.security.jwt_verifier import JwtVerifier
 from app.security.rate_limit import TurnRateLimiter
 from app.settings import Settings
+from app.validators.base import Frame
 from app.validators.color import ColorValidator
 from app.validators.fingers import FingerValidator
 from app.validators.object import ObjectValidator
 from app.validators.registry import ValidatorRegistry
 from app.validators.smile import SmileValidator
+
+
+class ObjectDetectorService(Protocol):
+    async def warm(self) -> None: ...
+
+    async def detect_batch(self, frames: list[Frame]) -> list[list[Detection]]: ...
 
 
 @dataclass(slots=True)
@@ -25,14 +34,18 @@ class Services:
     signer: CalibrationTokenSigner
     rate_limiter: TurnRateLimiter
     gateway: SupabaseGateway
+    attempts: AttemptTelemetrySink
     calibration: CalibrationService
     validators: ValidatorRegistry
-    detector: ModalObjectDetector
+    detector: ObjectDetectorService
 
 
-def build_services(settings: Settings, worker: RemoteWorker) -> Services:
-    detector = ModalObjectDetector(worker)
-    hands = MediaPipeHandAnalyzer()
+def build_services(
+    settings: Settings,
+    detector: ObjectDetectorService,
+    attempt_sink: AttemptTelemetrySink | None = None,
+) -> Services:
+    hands = MediaPipeHandAnalyzer(settings.hand_landmarker_path)
     face = MediaPipeFaceAnalyzer(settings.face_landmarker_path)
     signer = CalibrationTokenSigner(settings.calibration_signing_secret.get_secret_value())
     fallback = None
@@ -41,15 +54,17 @@ def build_services(settings: Settings, worker: RemoteWorker) -> Services:
             settings.gemini_api_key.get_secret_value(),
             settings.gemini_model,
         )
+    gateway = SupabaseGateway(
+        str(settings.supabase_url),
+        settings.supabase_secret_key.get_secret_value(),
+    )
     return Services(
         settings=settings,
         jwt=JwtVerifier(settings.jwks_url, settings.jwt_issuer, settings.jwt_audience),
         signer=signer,
         rate_limiter=TurnRateLimiter(),
-        gateway=SupabaseGateway(
-            str(settings.supabase_url),
-            settings.supabase_secret_key.get_secret_value(),
-        ),
+        gateway=gateway,
+        attempts=attempt_sink or InlineAttemptTelemetrySink(gateway),
         calibration=CalibrationService(detector, hands, face, signer),
         validators=ValidatorRegistry(
             [

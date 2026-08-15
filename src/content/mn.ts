@@ -93,7 +93,7 @@ export const mn = {
     scanning: "Хайж байна...",
     locking: "Таньж байна...",
     loading: "Таних систем ачаалж байна...",
-    aim: "Хүрээн дотор байрлуул",
+    aim: "Камерын аль ч хэсэгт харуул",
     aiSees: (what: string) => `AI: ${what}`,
     wrong: "Энэ биш!",
     wrongIs: (what: string) => `${what} — энэ биш!`,

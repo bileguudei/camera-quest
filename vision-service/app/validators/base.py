@@ -12,6 +12,11 @@ from app.models.turn import CalibrationClaims, QuestConfig
 Frame = np.ndarray[Any, np.dtype[np.uint8]]
 
 
+def consensus_is_settled(matches: int, processed: int, total: int, required: int) -> bool:
+    """Stop specialist inference once later frames cannot change the verdict."""
+    return matches >= required or matches + (total - processed) < required
+
+
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
     passed: bool

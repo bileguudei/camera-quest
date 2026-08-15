@@ -4,7 +4,36 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { AppError } from "@/shared/errors/appError";
 import type { Detection } from "./visionTypes";
 import type { VisionOutcome } from "./visionTypes";
-import { scanTurn } from "./visionClient";
+import {
+  createTurnVisionStream,
+  scanTurn,
+  type TurnVisionStream,
+} from "./visionClient";
+
+export const VISION_RETRY_DELAY_MS = 750;
+const MAX_SEQUENCE_START = 2_000_000_000;
+
+export const sequenceStartFromEntropy = (entropy: number) =>
+  (entropy >>> 0) % MAX_SEQUENCE_START + 1;
+
+const createSequenceStart = () => {
+  const entropy = new Uint32Array(1);
+  crypto.getRandomValues(entropy);
+  return sequenceStartFromEntropy(entropy[0]!);
+};
+
+const waitForRetry = (signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(resolve, VISION_RETRY_DELAY_MS);
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 
 export interface VisionSession {
   status: "idle" | "loading" | "ready" | "error";
@@ -53,7 +82,20 @@ export function useVisionSession(options: Options): VisionSession {
 
     const controller = new AbortController();
     settled.current = false;
-    sequence.current = 0;
+    // A reload must not reuse sequence numbers already accepted by Modal or
+    // Postgres for this active turn. The bounded random base stays within int4.
+    sequence.current = createSequenceStart();
+    let stream: TurnVisionStream | null = null;
+    try {
+      stream = createTurnVisionStream(
+        options.accessToken,
+        options.turnId,
+        options.calibrationToken,
+      );
+    } catch {
+      // HTTP remains a compatibility fallback for local tools and rolling deploys.
+      stream = null;
+    }
 
     const run = async () => {
       while (!controller.signal.aborted && !settled.current) {
@@ -64,14 +106,16 @@ export function useVisionSession(options: Options): VisionSession {
         }
         try {
           sequence.current += 1;
-          const verdict = await scanTurn(
-            video,
-            options.accessToken!,
-            options.turnId!,
-            sequence.current,
-            options.calibrationToken!,
-            controller.signal,
-          );
+          const verdict = stream
+            ? await stream.scan(video, sequence.current, controller.signal)
+            : await scanTurn(
+                video,
+                options.accessToken!,
+                options.turnId!,
+                sequence.current,
+                options.calibrationToken!,
+                controller.signal,
+              );
           setProgress(verdict.progress);
           setNote(verdict.note ?? undefined);
           setDetections(
@@ -103,12 +147,27 @@ export function useVisionSession(options: Options): VisionSession {
           }
           if (error instanceof AppError && error.code === "TURN_EXPIRED") {
             settled.current = true;
+            stream?.close();
             callbacks.current.onExpired();
             return;
           }
+          if (process.env.NODE_ENV === "development") {
+            const cause = error instanceof Error ? `${error.name} — ${error.message}` : typeof error;
+            console.error(`Camera Quest vision session failed: ${cause}`);
+          }
           setStatus("error");
-          settled.current = true;
-          callbacks.current.onSystemError();
+          setNote("Таних үйлчилгээтэй дахин холбогдож байна");
+          // A failed stream may have consumed its sequence number. Close it and
+          // retry the next sequence through the HTTP compatibility endpoint.
+          stream?.close();
+          stream = null;
+          try {
+            await waitForRetry(controller.signal);
+          } catch (retryError) {
+            if (retryError instanceof DOMException && retryError.name === "AbortError") return;
+            throw retryError;
+          }
+          setStatus("ready");
         }
       }
     };
@@ -120,6 +179,7 @@ export function useVisionSession(options: Options): VisionSession {
     return () => {
       window.clearTimeout(kickoff);
       controller.abort();
+      stream?.close();
     };
   }, [
     options.accessToken,

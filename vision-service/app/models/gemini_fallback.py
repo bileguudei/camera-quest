@@ -24,15 +24,17 @@ class GeminiObjectFallback:
             return False, 0
         response = await self._client.aio.models.generate_content(
             model=self._model,
-            contents=[
-                types.Part.from_text(
-                    text=(
-                        f"Is the main object in this image a {target_class}? "
-                        "Return false when uncertain or when only a screen/photo depicts it."
-                    )
-                ),
-                types.Part.from_bytes(data=jpeg.tobytes(), mime_type="image/jpeg"),
-            ],
+            contents=types.Content(
+                parts=[
+                    types.Part.from_text(
+                        text=(
+                            f"Is the main object in this image a {target_class}? "
+                            "Return false when uncertain or when only a screen/photo depicts it."
+                        )
+                    ),
+                    types.Part.from_bytes(data=jpeg.tobytes(), mime_type="image/jpeg"),
+                ]
+            ),
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=GeminiMatch,

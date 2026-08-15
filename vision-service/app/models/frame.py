@@ -25,10 +25,15 @@ async def decode_frames(files: list[UploadFile]) -> list[Frame]:
         if file.content_type not in {"image/jpeg", "image/jpg"}:
             raise InvalidFrame("only JPEG frames are accepted")
         raw = await file.read(MAX_FRAME_BYTES + 1)
-        if not raw or len(raw) > MAX_FRAME_BYTES:
-            raise InvalidFrame("invalid frame size")
-        image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
-        if image is None or image.shape[:2] != (FRAME_SIZE, FRAME_SIZE):
-            raise InvalidFrame("frame must be 512x512")
-        decoded.append(cast(Frame, image))
+        decoded.append(decode_frame_bytes(raw))
     return decoded
+
+
+def decode_frame_bytes(raw: bytes) -> Frame:
+    """Decode one bounded WebSocket frame through the same checks as HTTP uploads."""
+    if not raw or len(raw) > MAX_FRAME_BYTES:
+        raise InvalidFrame("invalid frame size")
+    image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if image is None or image.shape[:2] != (FRAME_SIZE, FRAME_SIZE):
+        raise InvalidFrame("frame must be 512x512")
+    return cast(Frame, image)

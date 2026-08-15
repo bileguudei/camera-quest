@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const colorSchema = z.enum(["violet", "blue", "lime", "orange", "pink", "cyan"]);
+const serverTimestampSchema = z.iso.datetime({ offset: true });
 
 export const playerSchema = z.object({
   id: z.uuid(),
@@ -40,9 +41,9 @@ export const preparedTurnSchema = z.object({
 
 export const activeTurnSchema = z.object({
   turnId: z.uuid(),
-  startedAt: z.iso.datetime(),
-  deadlineAt: z.iso.datetime(),
-  serverNow: z.iso.datetime(),
+  startedAt: serverTimestampSchema,
+  deadlineAt: serverTimestampSchema,
+  serverNow: serverTimestampSchema,
 });
 
 export const turnOutcomeSchema = z.object({

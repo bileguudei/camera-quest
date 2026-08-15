@@ -12,6 +12,10 @@ class TurnUnavailable(Exception):
     pass
 
 
+class GatewayUnavailable(Exception):
+    pass
+
+
 class SupabaseGateway:
     def __init__(self, url: str, service_role_key: str) -> None:
         self._client = httpx.AsyncClient(
@@ -26,20 +30,39 @@ class SupabaseGateway:
             timeout=5,
         )
 
+    async def warm(self) -> None:
+        """Prime the shared HTTPS/PostgREST connection before the first timed turn."""
+        try:
+            response = await self._client.get(
+                "/rest/v1/quests",
+                params={"select": "id", "limit": "1"},
+            )
+        except httpx.HTTPError as error:
+            raise GatewayUnavailable("supabase_request_failed") from error
+        if response.status_code >= 400:
+            raise GatewayUnavailable(f"supabase_status_{response.status_code}")
+
+    async def close(self) -> None:
+        await self._client.aclose()
+
     async def get_active_turn(self, turn_id: str, owner_id: str) -> ActiveTurn:
-        response = await self._client.get(
-            "/rest/v1/turns",
-            params={
-                "id": f"eq.{turn_id}",
-                "status": "eq.active",
-                "select": (
-                    "id,game_id,player_id,status,started_at,deadline_at,"
-                    "quest:quests!inner(id,key,kind,target_class,finger_count,target_color,validator_config),"
-                    "game:games!inner(owner_id)"
-                ),
-            },
-        )
-        response.raise_for_status()
+        try:
+            response = await self._client.get(
+                "/rest/v1/turns",
+                params={
+                    "id": f"eq.{turn_id}",
+                    "status": "eq.active",
+                    "select": (
+                        "id,game_id,player_id,status,started_at,deadline_at,"
+                        "quest:quests!inner(id,key,kind,target_class,finger_count,target_color,validator_config),"
+                        "game:games!inner(owner_id)"
+                    ),
+                },
+            )
+        except httpx.HTTPError as error:
+            raise GatewayUnavailable("supabase_request_failed") from error
+        if response.status_code >= 400:
+            raise GatewayUnavailable(f"supabase_status_{response.status_code}")
         rows: list[dict[str, Any]] = response.json()
         if len(rows) != 1 or rows[0]["game"]["owner_id"] != owner_id:
             raise TurnUnavailable
@@ -108,7 +131,12 @@ class SupabaseGateway:
         await self._rpc("abort_turn", {"p_turn_id": turn_id, "p_reason": reason})
 
     async def _rpc(self, name: str, payload: dict[str, Any]) -> Any:
-        response = await self._client.post(f"/rest/v1/rpc/{name}", json=payload)
+        try:
+            response = await self._client.post(f"/rest/v1/rpc/{name}", json=payload)
+        except httpx.HTTPError as error:
+            raise GatewayUnavailable("supabase_request_failed") from error
         if response.status_code >= 400:
+            if response.status_code in {401, 403, 429} or response.status_code >= 500:
+                raise GatewayUnavailable(f"supabase_status_{response.status_code}")
             raise TurnUnavailable(response.text[:200])
         return response.json() if response.content else None
