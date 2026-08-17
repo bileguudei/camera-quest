@@ -3,6 +3,7 @@ import {
   createTurnVisionStream,
   visionErrorCode,
   visionStreamUrl,
+  warmVisionService,
 } from "./visionClient";
 
 vi.mock("@/shared/env/publicEnv", () => ({
@@ -61,6 +62,37 @@ describe("visionErrorCode", () => {
     expect(visionErrorCode(409, { detail: { code: "TURN_EXPIRED" } })).toBe("TURN_EXPIRED");
     expect(visionErrorCode(422, { code: "INVALID_FRAME" })).toBe("INVALID_FRAME");
     expect(visionErrorCode(503, {})).toBe("VISION_UNAVAILABLE");
+  });
+});
+
+describe("vision warm-up", () => {
+  it("coalesces concurrent calls and reuses a recent successful warm-up", async () => {
+    window.localStorage.clear();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await Promise.all([warmVisionService("token"), warmVisionService("token")]);
+    await warmVisionService("token");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("does not cache a failed warm-up", async () => {
+    window.localStorage.clear();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(warmVisionService("token")).rejects.toMatchObject({
+      code: "VISION_UNAVAILABLE",
+    });
+    await expect(warmVisionService("token")).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
   });
 });
 

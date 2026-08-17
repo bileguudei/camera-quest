@@ -103,6 +103,18 @@ Camera Check-ийн authenticated `/v1/warmup` нь GPU-г 30 секундийн
 button-ийг нээхгүй. Production-д instant first-game start заавал шаардвал measured traffic/cost дээр
 үндэслэн GPU ASGI function-ийн `min_containers=1`-ийг тусдаа release change болгон идэвхжүүлнэ.
 
+Staging cost guard нь нэг төхөөрөмж дээр 1–6 хүн ээлжилж тоглох одоогийн урсгалд зориулагдсан:
+
+- GPU хэрэглэхгүй үед `min_containers=0` тул scale-to-zero хийнэ.
+- Сүүлийн request-ээс 90 секундийн дараа idle GPU унтарна.
+- Нэг GPU container гурван богино control request-ийг зэрэг хүлээн авч чадна.
+- Нэг browser-ийн амжилттай warmup-ийг 60 секунд cache хийж давхар request гаргахгүй.
+- Нэг GPU container-ийн дээд хязгаартай. Олон тусдаа төхөөрөмж зэрэг тоглох public launch-аас
+  өмнө энэ хязгаарыг load test-ийн үр дүнд тулгуурлан нэмнэ.
+
+Эдгээр тохиргоо model, 512×512 frame, batch 5, threshold болон validator consensus-ийг
+өөрчлөхгүй.
+
 ## 5. Production promotion
 
 Staging camera matrix болон release thresholds тэнцсэний дараа ижил дарааллыг production

@@ -16,6 +16,10 @@ MANIFEST_PATH = MODEL_DIR / "manifest.json"
 LANDMARKER_DIR = Path("/opt/camera-quest")
 HAND_LANDMARKER_PATH = LANDMARKER_DIR / "hand_landmarker.task"
 FACE_LANDMARKER_PATH = LANDMARKER_DIR / "face_landmarker.task"
+GPU_SCALEDOWN_WINDOW_SECONDS = 90
+GPU_MAX_CONTAINERS = 1
+GPU_MAX_CONCURRENT_INPUTS = 3
+GPU_TARGET_CONCURRENT_INPUTS = 2
 
 app = modal.App(APP_NAME)
 model_volume = modal.Volume.from_name("camera-quest-models", create_if_missing=True)
@@ -273,7 +277,8 @@ def build_model_artifact() -> None:
     # cannot be changed in place.
     routing_region="ap-south",
     min_containers=0,
-    scaledown_window=600,
+    max_containers=GPU_MAX_CONTAINERS,
+    scaledown_window=GPU_SCALEDOWN_WINDOW_SECONDS,
     timeout=30,
     volumes={"/models": model_volume},
 )
@@ -535,9 +540,16 @@ def smoke_onnx(image_path: str) -> None:
     region="ap",
     routing_region="ap-south",
     min_containers=0,
-    scaledown_window=600,
+    max_containers=GPU_MAX_CONTAINERS,
+    scaledown_window=GPU_SCALEDOWN_WINDOW_SECONDS,
     timeout=45,
     volumes={"/models": model_volume},
+)
+# Browser preflight and warm-up requests can overlap briefly. Sharing one GPU
+# container avoids duplicate cold starts without changing model inference.
+@modal.concurrent(
+    max_inputs=GPU_MAX_CONCURRENT_INPUTS,
+    target_inputs=GPU_TARGET_CONCURRENT_INPUTS,
 )
 @modal.asgi_app()
 def api() -> Any:

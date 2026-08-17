@@ -355,15 +355,47 @@ export function createTurnVisionStream(
   );
 }
 
+const WARMUP_CACHE_MS = 60_000;
+const WARMUP_CACHE_KEY = `camera-quest:vision-warm-until:${publicEnv.visionUrl ?? "disabled"}`;
+let warmupInFlight: Promise<void> | null = null;
+
+function hasRecentWarmup(): boolean {
+  try {
+    return Number(window.localStorage.getItem(WARMUP_CACHE_KEY)) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function rememberWarmup(): void {
+  try {
+    window.localStorage.setItem(WARMUP_CACHE_KEY, String(Date.now() + WARMUP_CACHE_MS));
+  } catch {
+    // Private browsing/storage policies must not block the game from warming Modal.
+  }
+}
+
 export async function warmVisionService(
   accessToken: string,
   signal?: AbortSignal,
 ): Promise<void> {
   if (!publicEnv.visionEnabled || !publicEnv.visionUrl) return;
-  const response = await fetch(endpoint("/v1/warmup"), {
+  if (hasRecentWarmup()) return;
+  if (warmupInFlight) return warmupInFlight;
+
+  const request = fetch(endpoint("/v1/warmup"), {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}` },
     signal,
+  }).then((response) => {
+    if (!response.ok) throw new AppError("VISION_UNAVAILABLE", "Vision warm-up failed", true);
+    rememberWarmup();
   });
-  if (!response.ok) throw new AppError("VISION_UNAVAILABLE", "Vision warm-up failed", true);
+  warmupInFlight = request;
+
+  try {
+    await request;
+  } finally {
+    if (warmupInFlight === request) warmupInFlight = null;
+  }
 }
