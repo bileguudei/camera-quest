@@ -34,7 +34,7 @@ def test_gpu_cost_controls_preserve_scale_to_zero() -> None:
     constants = _integer_constants()
 
     assert constants["GPU_SCALEDOWN_WINDOW_SECONDS"] == 90
-    assert constants["GPU_MAX_CONTAINERS"] == 1
+    assert constants["GPU_MAX_CONTAINERS"] == 3
 
 
 def test_api_accepts_short_control_request_bursts_in_one_container() -> None:

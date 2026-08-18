@@ -78,6 +78,28 @@ describe("vision warm-up", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps the shared warm-up alive when the first React effect is cleaned up", async () => {
+    window.localStorage.clear();
+    let finishRequest!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      finishRequest = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+
+    const first = warmVisionService("token", firstController.signal);
+    const second = warmVisionService("token", secondController.signal);
+    firstController.abort();
+
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    finishRequest(new Response(null, { status: 204 }));
+    await expect(second).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
   it("does not cache a failed warm-up", async () => {
     window.localStorage.clear();
     const fetchMock = vi
