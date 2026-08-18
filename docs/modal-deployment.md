@@ -109,8 +109,9 @@ Staging cost guard нь нэг төхөөрөмж дээр 1–6 хүн ээлж
 - Сүүлийн request-ээс 90 секундийн дараа idle GPU унтарна.
 - Нэг GPU container гурван богино control request-ийг зэрэг хүлээн авч чадна.
 - Нэг browser-ийн амжилттай warmup-ийг 60 секунд cache хийж давхар request гаргахгүй.
-- Нэг GPU container-ийн дээд хязгаартай. Олон тусдаа төхөөрөмж зэрэг тоглох public launch-аас
-  өмнө энэ хязгаарыг load test-ийн үр дүнд тулгуурлан нэмнэ.
+- GPU container-ийн дээд хязгаар 3 тул гурван тусдаа төхөөрөмж/localhost зэрэг тоглож болно.
+  Илүү олон төхөөрөмж зэрэг тоглох public launch-аас өмнө энэ хязгаарыг load test-ийн үр дүнд
+  тулгуурлан нэмнэ.
 
 Эдгээр тохиргоо model, 512×512 frame, batch 5, threshold болон validator consensus-ийг
 өөрчлөхгүй.

@@ -375,27 +375,42 @@ function rememberWarmup(): void {
   }
 }
 
+function waitForWarmup(request: Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) return request;
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+
+  return new Promise((resolve, reject) => {
+    const handleAbort = () => {
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", handleAbort, { once: true });
+    void request.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", handleAbort);
+    });
+  });
+}
+
 export async function warmVisionService(
   accessToken: string,
   signal?: AbortSignal,
 ): Promise<void> {
   if (!publicEnv.visionEnabled || !publicEnv.visionUrl) return;
   if (hasRecentWarmup()) return;
-  if (warmupInFlight) return warmupInFlight;
-
-  const request = fetch(endpoint("/v1/warmup"), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
-    signal,
-  }).then((response) => {
-    if (!response.ok) throw new AppError("VISION_UNAVAILABLE", "Vision warm-up failed", true);
-    rememberWarmup();
-  });
-  warmupInFlight = request;
-
-  try {
-    await request;
-  } finally {
-    if (warmupInFlight === request) warmupInFlight = null;
+  let request = warmupInFlight;
+  if (!request) {
+    request = fetch(endpoint("/v1/warmup"), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).then((response) => {
+      if (!response.ok) throw new AppError("VISION_UNAVAILABLE", "Vision warm-up failed", true);
+      rememberWarmup();
+    });
+    warmupInFlight = request;
+    const clearRequest = () => {
+      if (warmupInFlight === request) warmupInFlight = null;
+    };
+    void request.then(clearRequest, clearRequest);
   }
+
+  await waitForWarmup(request, signal);
 }
