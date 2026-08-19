@@ -8,16 +8,16 @@ Camera Quest бол нэг утас эсвэл компьютерийн каме
 
 ## Одоогийн төлөв (2026-08-15)
 
-| Хэсэг | Төлөв |
-| --- | --- |
-| Тоглоомын UI, mobile responsive flow | Бэлэн |
-| 1–6 тоглогч, 5 раунд, 30 секундийн timer | Бэлэн |
-| Random quest, оноо, XP, level, streak, achievement | Бэлэн |
-| Supabase database, RLS, Edge Function | Hosted project дээр ажиллаж байгаа |
-| Object, өнгө, smile танилт | Modal staging дээр ажиллаж байгаа |
-| 1–5 хуруу танилт | Хамгийн сүүлийн засвар staging-д deploy болсон; бодит төхөөрөмжийн олон нөхцөл дээр дахин шалгана |
-| Vercel production URL, custom domain | Хийгдээгүй; хамгийн сүүлд холбоно |
-| Production release gate | Бүрэн хаагдаагүй; live camera matrix үлдсэн |
+| Хэсэг                                              | Төлөв                                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Тоглоомын UI, mobile responsive flow               | Бэлэн                                                                                             |
+| 1–6 тоглогч, 5 раунд, 30 секундийн timer           | Бэлэн                                                                                             |
+| Random quest, оноо, XP, level, streak, achievement | Бэлэн                                                                                             |
+| Supabase database, RLS, Edge Function              | Hosted project дээр ажиллаж байгаа                                                                |
+| Object, өнгө, smile танилт                         | Modal staging дээр ажиллаж байгаа                                                                 |
+| 1–5 хуруу танилт                                   | Хамгийн сүүлийн засвар staging-д deploy болсон; бодит төхөөрөмжийн олон нөхцөл дээр дахин шалгана |
+| Vercel production URL, custom domain               | Хийгдээгүй; хамгийн сүүлд холбоно                                                                 |
+| Production release gate                            | Бүрэн хаагдаагүй; live camera matrix үлдсэн                                                       |
 
 Одоогийн даалгаврууд:
 
@@ -25,7 +25,7 @@ Camera Quest бол нэг утас эсвэл компьютерийн каме
   laptop, удирдлага, цаг, хайч, шүдний сойз, тоглоомон баавгай.
 - Хуруу: 1–5.
 - Өнгө: улаан, цэнхэр, ногоон, шар.
-- Инээмсэглэл.
+- Инээмсэглэл :0.
 
 Object танилтад GPU дээр RF-DETR-L ONNX, хуруу/инээмсэглэлд MediaPipe, өнгөнд OpenCV ашиглаж
 байна. Browser дотор AI model ажиллахгүй. Gemini fallback болон semantic quest одоогоор унтраалттай.
