@@ -88,6 +88,20 @@ RF-DETR-L-ийн official TensorRT FP16 болон FP32 export нь T4 дээр 
 parity алдсан тул release gate-ээр хаагдсан. Serving path нь зөв output өгсөн ONNX Runtime CUDA-г
 ашиглана. TensorRT-ийг зөвхөн ижил fixture дээр confidence/label parity давсны дараа буцаана.
 
+Browser origin-ийн жагсаалт нь `camera-quest-vision-origins` гэсэн тусдаа secret дотор
+`ALLOWED_ORIGINS`-аар тавигдана. Шинэ deploy URL нэмэхэд Supabase болон гарын үсгийн түлхүүр
+агуулсан үндсэн secret-ийг дахин бичих эрсдэлгүй; secret жагсаалтад сүүлд байгаа тул утга нь
+үндсэн secret-ийнхийг дарж бичнэ.
+
+```bash
+modal secret create --env staging --force camera-quest-vision-origins \
+  ALLOWED_ORIGINS="http://localhost:3000,https://<deploy-domain>"
+modal deploy --env staging modal_app.py
+```
+
+Мөн Supabase edge function-ий `CORS_ALLOWED_ORIGINS` secret-д ижил origin байх ёстой
+(`supabase secrets set CORS_ALLOWED_ORIGINS=...`), эс бөгөөс browser preflight 403 өгнө.
+
 Deploy дараа Modal dashboard-аас HTTPS endpoint-ийг авч Vercel preview environment-ийн
 `NEXT_PUBLIC_VISION_URL`-д оруулна. `NEXT_PUBLIC_VISION_ENABLED=true` болгохоос өмнө `/health`,
 authenticated `/v1/warmup`, calibration болон нэг active turn validation smoke test ажиллуулна.
@@ -99,6 +113,9 @@ compatibility fallback хэвээр үлдэнэ.
 `resolve_turn` background job биш бөгөөд оноог request дотор transaction-аар шийднэ.
 
 Camera Check-ийн authenticated `/v1/warmup` нь GPU-г 30 секундийн turn эхлэхээс өмнө асаана.
+Мөн турн бүрийн 3–2–1 countdown дээр дахин warm-up хийж, дуусахыг хүлээж байж `activate-turn`
+дуудна. Server deadline нь `activate-turn` дээр эхэлдэг тул cold start заавал turn-ийн цагийн
+гадна үлдэнэ; 1.5 секундээс удвал дэлгэц дээр «Cloud GPU сэрж байна» гэсэн тайлбар гарна.
 `min_containers=0` үед шинэ GPU container-ийн cold start үлдэх учраас UI model бэлэн болтол start
 button-ийг нээхгүй. Production-д instant first-game start заавал шаардвал measured traffic/cost дээр
 үндэслэн GPU ASGI function-ийн `min_containers=1`-ийг тусдаа release change болгон идэвхжүүлнэ.
@@ -109,9 +126,14 @@ Staging cost guard нь нэг төхөөрөмж дээр 1–6 хүн ээлж
 - Сүүлийн request-ээс 90 секундийн дараа idle GPU унтарна.
 - Нэг GPU container гурван богино control request-ийг зэрэг хүлээн авч чадна.
 - Нэг browser-ийн амжилттай warmup-ийг 60 секунд cache хийж давхар request гаргахгүй.
-- GPU container-ийн дээд хязгаар 3 тул гурван тусдаа төхөөрөмж/localhost зэрэг тоглож болно.
-  Илүү олон төхөөрөмж зэрэг тоглох public launch-аас өмнө энэ хязгаарыг load test-ийн үр дүнд
-  тулгуурлан нэмнэ.
+- GPU container-ийн дээд хязгаар 3, нэг container 3 input авдаг тул зэрэг 9 хүртэл turn
+  боловсруулна. Илүү олон төхөөрөмж зэрэг тоглох public launch-аас өмнө энэ хязгаарыг load
+  test-ийн үр дүнд тулгуурлан нэмнэ.
+- `buffer_containers=1` нь ачаалалтай үед нэг сул container-ийг халуун байлгана. `/v1/stream`
+  WebSocket нь turn-ийн 30 секундийн турш нэг input эзэлдэг тул `target_inputs`-ийг давсан
+  тоглогч ямар ч spare байхгүй бол өөрийн turn дотроо ~15 секундийн cold start хүлээнэ.
+  Хэрэглэгчгүй үед app бүрэн 0 болж унтардаг тул idle зардал нэмэгдэхгүй; зөвхөн тоглож
+  байх хугацаанд нэг нэмэлт GPU төлнө. Зардлыг эргүүлэхийн тулд `GPU_BUFFER_CONTAINERS = 0`.
 
 Эдгээр тохиргоо model, 512×512 frame, batch 5, threshold болон validator consensus-ийг
 өөрчлөхгүй.

@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     gemini_fallback_enabled: bool = False
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.6-flash"
-    hand_landmarker_path: str = "/models/hand_landmarker.task"
     face_landmarker_path: str = "/models/face_landmarker.task"
     max_body_bytes: int = 1_572_864
     sentry_dsn: SecretStr | None = None

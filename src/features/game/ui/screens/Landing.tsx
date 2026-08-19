@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Play } from "lucide-react";
+import { Play, Users } from "lucide-react";
 import { GameButton } from "@/features/game/ui/components/GameButton";
 import { Screen, ScreenFooter } from "@/features/game/ui/components/Screen";
 import { Chip } from "@/features/game/ui/components/StatusBadge";
@@ -19,6 +19,7 @@ const fadeUp = {
 
 export function Landing() {
   const openSetup = useGame((s) => s.openSetup);
+  const openOnline = useGame((s) => s.openOnline);
 
   return (
     <Screen className="justify-between">
@@ -99,6 +100,15 @@ export function Landing() {
             icon={<Play className="size-6 fill-current" strokeWidth={0} />}
           >
             {mn.landing.cta}
+          </GameButton>
+          <GameButton
+            className="mt-2.5"
+            variant="ghost"
+            size="md"
+            onClick={openOnline}
+            icon={<Users className="size-5" strokeWidth={2.6} />}
+          >
+            {mn.landing.onlineCta}
           </GameButton>
           <p className="mt-3 text-center text-sm text-ink-3">{mn.landing.how}</p>
         </motion.div>

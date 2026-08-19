@@ -22,7 +22,11 @@ describe("game machine", () => {
     actor.send({ type: "CONFIRM_PLAYERS" });
     actor.send({
       type: "START_GAME",
-      session: { gameId: "00000000-0000-4000-8000-000000000002", players: [player] },
+      session: {
+        gameId: "00000000-0000-4000-8000-000000000002",
+        environment: "home",
+        players: [player],
+      },
     });
     actor.send({ type: "BEGIN_ROUND" });
     actor.send({ type: "PLAYER_READY" });

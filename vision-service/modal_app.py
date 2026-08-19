@@ -14,12 +14,16 @@ ONNX_PATH = MODEL_DIR / "rfdetr-large.onnx"
 LEGACY_ENGINE_PATH = MODEL_DIR / "rfdetr-large.trt"
 MANIFEST_PATH = MODEL_DIR / "manifest.json"
 LANDMARKER_DIR = Path("/opt/camera-quest")
-HAND_LANDMARKER_PATH = LANDMARKER_DIR / "hand_landmarker.task"
 FACE_LANDMARKER_PATH = LANDMARKER_DIR / "face_landmarker.task"
 GPU_SCALEDOWN_WINDOW_SECONDS = 90
 GPU_MAX_CONTAINERS = 3
 GPU_MAX_CONCURRENT_INPUTS = 3
 GPU_TARGET_CONCURRENT_INPUTS = 2
+# One idle spare *only while the app already has load*; an idle app still scales
+# to zero. A turn's WebSocket occupies an input slot for its whole 30 seconds, so
+# without a spare the player who crosses `target_inputs` waits out a ~15s cold
+# start inside their own turn clock. Costs one extra GPU during play only.
+GPU_BUFFER_CONTAINERS = 1
 
 app = modal.App(APP_NAME)
 model_volume = modal.Volume.from_name("camera-quest-models", create_if_missing=True)
@@ -74,16 +78,12 @@ gpu_api_image = (
     .pip_install(*cpu_packages)
     .run_commands(
         f"mkdir -p {LANDMARKER_DIR}",
-        f"curl -fsSL -o {HAND_LANDMARKER_PATH} "
-        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
-        "hand_landmarker/float16/1/hand_landmarker.task",
         f"curl -fsSL -o {FACE_LANDMARKER_PATH} "
         "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
         "face_landmarker/float16/1/face_landmarker.task",
     )
     .env(
         {
-            "HAND_LANDMARKER_PATH": str(HAND_LANDMARKER_PATH),
             "FACE_LANDMARKER_PATH": str(FACE_LANDMARKER_PATH),
         }
     )
@@ -536,11 +536,18 @@ def smoke_onnx(image_path: str) -> None:
 @app.function(
     image=gpu_api_image,
     gpu=["T4", "L4"],
-    secrets=[modal.Secret.from_name("camera-quest-vision-secrets")],
+    # The browser origin list lives in its own secret so adding a deployment URL
+    # never risks rewriting the Supabase and signing credentials next to it.
+    # It comes last: a value here intentionally wins over the base secret.
+    secrets=[
+        modal.Secret.from_name("camera-quest-vision-secrets"),
+        modal.Secret.from_name("camera-quest-vision-origins"),
+    ],
     region="ap",
     routing_region="ap-south",
     min_containers=0,
     max_containers=GPU_MAX_CONTAINERS,
+    buffer_containers=GPU_BUFFER_CONTAINERS,
     scaledown_window=GPU_SCALEDOWN_WINDOW_SECONDS,
     timeout=45,
     volumes={"/models": model_volume},

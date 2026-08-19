@@ -1,5 +1,5 @@
 /** Generated from Supabase schema. Do not edit by hand.
- * schema-sha256: 774f50614ea4983185b0da78365eced9736f50cad4d124bde2d8de993898d66e
+ * schema-sha256: 7bc7fecac5864b339d89e3f5f159343426409f1ad135f85b81a4f276d3b9bf62
  */
 
 export type Json =
@@ -49,8 +49,12 @@ export type Database = {
           final_rank: number | null
           game_id: string
           id: string
+          left_at: string | null
           match_score: number
+          mode: Database["public"]["Enums"]["game_mode"]
+          owner_id: string
           player_id: string
+          ready: boolean
           seat: number
           successful_turns: number
         }
@@ -59,8 +63,12 @@ export type Database = {
           final_rank?: number | null
           game_id: string
           id?: string
+          left_at?: string | null
           match_score?: number
+          mode?: Database["public"]["Enums"]["game_mode"]
+          owner_id: string
           player_id: string
+          ready?: boolean
           seat: number
           successful_turns?: number
         }
@@ -69,8 +77,12 @@ export type Database = {
           final_rank?: number | null
           game_id?: string
           id?: string
+          left_at?: string | null
           match_score?: number
+          mode?: Database["public"]["Enums"]["game_mode"]
+          owner_id?: string
           player_id?: string
+          ready?: boolean
           seat?: number
           successful_turns?: number
         }
@@ -96,7 +108,13 @@ export type Database = {
           completed_at: string | null
           created_at: string
           current_round: number
+          current_seat: number
+          environment: Database["public"]["Enums"]["game_environment"]
+          host_id: string
           id: string
+          join_code: string | null
+          lobby_open: boolean
+          mode: Database["public"]["Enums"]["game_mode"]
           owner_id: string
           rules_version: string
           started_at: string
@@ -106,7 +124,13 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           current_round?: number
+          current_seat?: number
+          environment?: Database["public"]["Enums"]["game_environment"]
+          host_id: string
           id?: string
+          join_code?: string | null
+          lobby_open?: boolean
+          mode?: Database["public"]["Enums"]["game_mode"]
           owner_id: string
           rules_version?: string
           started_at?: string
@@ -116,7 +140,13 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           current_round?: number
+          current_seat?: number
+          environment?: Database["public"]["Enums"]["game_environment"]
+          host_id?: string
           id?: string
+          join_code?: string | null
+          lobby_open?: boolean
+          mode?: Database["public"]["Enums"]["game_mode"]
           owner_id?: string
           rules_version?: string
           started_at?: string
@@ -255,12 +285,13 @@ export type Database = {
           active: boolean
           created_at: string
           difficulty: Database["public"]["Enums"]["quest_difficulty"]
-          finger_count: number | null
+          environments: Database["public"]["Enums"]["game_environment"][]
           hex: string | null
           id: string
           key: string
           kind: Database["public"]["Enums"]["quest_kind"]
           label: string
+          portable: boolean
           prompt: string
           target_class: string | null
           target_color: string | null
@@ -270,12 +301,13 @@ export type Database = {
           active?: boolean
           created_at?: string
           difficulty: Database["public"]["Enums"]["quest_difficulty"]
-          finger_count?: number | null
+          environments?: Database["public"]["Enums"]["game_environment"][]
           hex?: string | null
           id: string
           key: string
           kind: Database["public"]["Enums"]["quest_kind"]
           label: string
+          portable?: boolean
           prompt: string
           target_class?: string | null
           target_color?: string | null
@@ -285,12 +317,13 @@ export type Database = {
           active?: boolean
           created_at?: string
           difficulty?: Database["public"]["Enums"]["quest_difficulty"]
-          finger_count?: number | null
+          environments?: Database["public"]["Enums"]["game_environment"][]
           hex?: string | null
           id?: string
           key?: string
           kind?: Database["public"]["Enums"]["quest_kind"]
           label?: string
+          portable?: boolean
           prompt?: string
           target_class?: string | null
           target_color?: string | null
@@ -483,9 +516,34 @@ export type Database = {
         Returns: undefined
       }
       activate_turn: { Args: { p_turn_id: string }; Returns: Json }
+      advance_turn_pointer: {
+        Args: { p_from_round: number; p_from_seat: number; p_game_id: string }
+        Returns: Json
+      }
       complete_game: { Args: { p_game_id: string }; Returns: undefined }
-      create_game: { Args: { p_players: Json }; Returns: Json }
+      create_game: {
+        Args: {
+          p_environment?: Database["public"]["Enums"]["game_environment"]
+          p_players: Json
+        }
+        Returns: Json
+      }
+      create_online_game: {
+        Args: {
+          p_environment?: Database["public"]["Enums"]["game_environment"]
+          p_name: string
+        }
+        Returns: Json
+      }
       expire_turn: { Args: { p_turn_id: string }; Returns: Json }
+      game_state: { Args: { p_game_id: string }; Returns: Json }
+      generate_join_code: { Args: never; Returns: string }
+      is_game_member: { Args: { p_game_id: string }; Returns: boolean }
+      join_game: {
+        Args: { p_join_code: string; p_name: string }
+        Returns: Json
+      }
+      leave_game: { Args: { p_game_id: string }; Returns: Json }
       level_for_xp: { Args: { p_total_xp: number }; Returns: number }
       prepare_turn: {
         Args: {
@@ -521,15 +579,25 @@ export type Database = {
         }
         Returns: Json
       }
+      seat_avatar: { Args: { p_seat: number }; Returns: string }
+      seat_color: { Args: { p_seat: number }; Returns: string }
+      set_player_ready: {
+        Args: { p_game_id: string; p_ready: boolean }
+        Returns: Json
+      }
+      spectate_game_id: { Args: { p_topic: string }; Returns: string }
+      start_online_game: { Args: { p_game_id: string }; Returns: Json }
       unlock_achievements: {
         Args: { p_elapsed_ms: number; p_game_id: string; p_player_id: string }
         Returns: string[]
       }
     }
     Enums: {
+      game_environment: "school" | "home" | "outdoor"
+      game_mode: "local" | "online"
       game_status: "active" | "completed" | "abandoned"
       quest_difficulty: "easy" | "medium" | "hard"
-      quest_kind: "object" | "fingers" | "smile" | "color"
+      quest_kind: "object" | "smile" | "color"
       turn_status: "prepared" | "active" | "passed" | "timed_out" | "aborted"
       vision_decision: "continue" | "pass" | "system_error"
     }
@@ -659,9 +727,11 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      game_environment: ["school", "home", "outdoor"],
+      game_mode: ["local", "online"],
       game_status: ["active", "completed", "abandoned"],
       quest_difficulty: ["easy", "medium", "hard"],
-      quest_kind: ["object", "fingers", "smile", "color"],
+      quest_kind: ["object", "smile", "color"],
       turn_status: ["prepared", "active", "passed", "timed_out", "aborted"],
       vision_decision: ["continue", "pass", "system_error"],
     },

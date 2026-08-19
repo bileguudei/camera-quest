@@ -4,7 +4,9 @@ import type {
   ActiveTurn,
   CameraFacing,
   CameraMode,
+  GameEnvironment,
   GameSession,
+  LobbyState,
   Player,
   PreparedTurn,
   TurnOutcome,
@@ -24,12 +26,18 @@ export interface GameContext {
   lastOutcome: TurnOutcome | null;
   cameraFacing: CameraFacing;
   cameraMode: CameraMode;
+  /** Chosen before the game starts; the server draws quests only from it. */
+  environment: GameEnvironment;
   busy: boolean;
   errorCode: string | null;
+  /** Set only for online tables; null keeps every local hot-seat path unchanged. */
+  lobby: LobbyState | null;
 }
 
 export type GameEvent =
   | { type: "OPEN_SETUP" }
+  | { type: "OPEN_ONLINE" }
+  | { type: "LOBBY_UPDATED"; lobby: LobbyState }
   | { type: "GO_LANDING" }
   | { type: "GO_WINNER" }
   | { type: "SET_PLAYER_COUNT"; count: number }
@@ -37,6 +45,7 @@ export type GameEvent =
   | { type: "CONFIRM_PLAYERS" }
   | { type: "SET_CAMERA_FACING"; facing: CameraFacing }
   | { type: "SET_CAMERA_MODE"; mode: CameraMode }
+  | { type: "SET_ENVIRONMENT"; environment: GameEnvironment }
   | { type: "START_GAME_PENDING" }
   | { type: "START_GAME"; session: GameSession }
   | { type: "GAME_FAILED"; code: string }
@@ -53,6 +62,9 @@ export type GameEvent =
   | { type: "COMPLETE_GAME_PENDING" }
   | { type: "PLAY_AGAIN" }
   | { type: "NEW_GAME" };
+
+const pointerOf = (lobby: LobbyState | null) =>
+  lobby ? `${lobby.currentRound}:${lobby.currentSeat}` : null;
 
 function makePlayer(seat: number, previous?: Player): Player {
   return {
@@ -92,8 +104,10 @@ export function createInitialGameContext(): GameContext {
     lastOutcome: null,
     cameraFacing: "environment",
     cameraMode: "live",
+    environment: "home",
     busy: false,
     errorCode: null,
+    lobby: null,
   };
 }
 
@@ -105,6 +119,25 @@ export const gameMachine = setup({
   guards: {
     hasMorePlayers: ({ context }) => context.turnIndex < context.players.length - 1,
     hasMoreRounds: ({ context }) => context.roundIndex < TOTAL_ROUNDS - 1,
+    isOnline: ({ context }) => context.lobby !== null,
+    onlineFinished: ({ context }) => context.lobby?.status === "completed",
+    lobbyStarted: ({ event }) => event.type === "LOBBY_UPDATED" && !event.lobby.lobbyOpen,
+    gameFinished: ({ event }) =>
+      event.type === "LOBBY_UPDATED" && event.lobby.status !== "active",
+    pointerMoved: ({ context, event }) =>
+      event.type === "LOBBY_UPDATED" && pointerOf(event.lobby) !== pointerOf(context.lobby),
+    roundAdvanced: ({ context, event }) =>
+      event.type === "LOBBY_UPDATED" &&
+      context.lobby !== null &&
+      event.lobby.currentRound !== context.lobby.currentRound,
+    // A phone that is not playing learns the result from the table, not from a
+    // vision stream it never opened.
+    spectatedTurnResolved: ({ context, event }) => {
+      if (event.type !== "LOBBY_UPDATED") return false;
+      const turn = event.lobby.lastTurn;
+      if (!turn?.outcome || turn.seat === event.lobby.selfSeat) return false;
+      return turn.outcome.turnId !== context.lastOutcome?.turnId;
+    },
   },
   actions: {
     setPlayerCount: assign(({ context, event }) => {
@@ -126,6 +159,9 @@ export const gameMachine = setup({
     setCameraMode: assign(({ event }) =>
       event.type === "SET_CAMERA_MODE" ? { cameraMode: event.mode } : {},
     ),
+    setEnvironment: assign(({ event }) =>
+      event.type === "SET_ENVIRONMENT" ? { environment: event.environment } : {},
+    ),
     markBusy: assign({ busy: true, errorCode: null }),
     clearBusy: assign({ busy: false, errorCode: null }),
     setFailure: assign(({ event }) => ({
@@ -146,6 +182,7 @@ export const gameMachine = setup({
       if (event.type !== "START_GAME") return {};
       return {
         gameId: event.session.gameId,
+        environment: event.session.environment,
         players: event.session.players,
         playerCount: event.session.players.length,
         roundIndex: 0,
@@ -215,6 +252,54 @@ export const gameMachine = setup({
       errorCode: null,
       busy: false,
     })),
+    applyLobby: assign(({ context, event }) => {
+      if (event.type !== "LOBBY_UPDATED") return {};
+      const lobby = event.lobby;
+      // The board only needs the roster fields; ready/left/isSelf stay on `lobby`.
+      const players: Player[] = lobby.players.map((entry) => ({
+        id: entry.id,
+        profileId: entry.profileId,
+        seat: entry.seat,
+        name: entry.name,
+        color: entry.color,
+        avatar: entry.avatar,
+        score: entry.score,
+        totalXp: entry.totalXp,
+        level: entry.level,
+        streak: entry.streak,
+      }));
+      const seated = players.findIndex((player) => player.seat === lobby.currentSeat);
+      const roundIndex = lobby.currentRound - 1;
+      return {
+        lobby,
+        gameId: lobby.gameId,
+        environment: lobby.environment,
+        players,
+        playerCount: players.length,
+        roundIndex,
+        turnIndex: seated < 0 ? 0 : seated,
+        // Round deltas are measured from the scores the round opened with.
+        roundSnapshot:
+          roundIndex === context.roundIndex ? context.roundSnapshot : scoreSnapshot(players),
+        busy: false,
+      };
+    }),
+    applySpectatedOutcome: assign(({ event }) =>
+      event.type === "LOBBY_UPDATED" && event.lobby.lastTurn?.outcome
+        ? { lastOutcome: event.lobby.lastTurn.outcome, deadlineAtMs: null }
+        : {},
+    ),
+    awaitPointer: assign({ busy: true, errorCode: null }),
+    nextRoundOnline: assign(({ context }) => ({
+      preparedTurn: null,
+      calibrationToken: null,
+      deadlineAtMs: null,
+      lastOutcome: null,
+      roundSnapshot: scoreSnapshot(context.players),
+      errorCode: null,
+      busy: false,
+    })),
+    leaveLobby: assign({ lobby: null, gameId: null, busy: false, errorCode: null }),
     resetMatch: assign(({ context }) => {
       const players = context.players.map((player) => ({ ...player, score: 0 }));
       return {
@@ -236,13 +321,36 @@ export const gameMachine = setup({
   initial: "landing",
   context: createInitialGameContext,
   on: {
-    GO_LANDING: { target: ".landing" },
+    // Keeping the table fresh everywhere means a phone that walks into any
+    // screen still sees the authoritative scores and pointer.
+    LOBBY_UPDATED: { actions: "applyLobby" },
+    GO_LANDING: { target: ".landing", actions: "leaveLobby" },
     GO_WINNER: { target: ".winner" },
     SET_CAMERA_FACING: { actions: "setFacing" },
     SET_CAMERA_MODE: { actions: "setCameraMode" },
+    SET_ENVIRONMENT: { actions: "setEnvironment" },
   },
   states: {
-    landing: { on: { OPEN_SETUP: "setup" } },
+    landing: { on: { OPEN_SETUP: "setup", OPEN_ONLINE: "onlineStart" } },
+    onlineStart: {
+      on: {
+        START_GAME_PENDING: { actions: "markBusy" },
+        LOBBY_UPDATED: { target: "lobby", actions: "applyLobby" },
+        GAME_FAILED: { actions: "setFailure" },
+      },
+    },
+    lobby: {
+      on: {
+        START_GAME_PENDING: { actions: "markBusy" },
+        LOBBY_UPDATED: [
+          // The host closing the lobby is what sends every phone to its own
+          // camera check; from there the flow is the single-device one.
+          { guard: "lobbyStarted", target: "cameraCheck", actions: "applyLobby" },
+          { actions: "applyLobby" },
+        ],
+        GAME_FAILED: { actions: "setFailure" },
+      },
+    },
     setup: {
       on: {
         SET_PLAYER_COUNT: { actions: "setPlayerCount" },
@@ -258,7 +366,20 @@ export const gameMachine = setup({
       },
     },
     roundIntro: { on: { BEGIN_ROUND: "playerHandoff" } },
-    playerHandoff: { on: { PLAYER_READY: "calibrating" } },
+    playerHandoff: {
+      on: {
+        PLAYER_READY: "calibrating",
+        LOBBY_UPDATED: [
+          {
+            guard: "spectatedTurnResolved",
+            target: "turnResult",
+            actions: ["applyLobby", "applySpectatedOutcome"],
+          },
+          { guard: "gameFinished", target: "winner", actions: "applyLobby" },
+          { actions: "applyLobby" },
+        ],
+      },
+    },
     calibrating: {
       entry: "markBusy",
       on: {
@@ -282,14 +403,25 @@ export const gameMachine = setup({
     turnResult: {
       on: {
         ADVANCE_TURN: [
+          // Online tables wait for the server pointer instead of guessing who
+          // is next; the advance RPC is what produces the next LOBBY_UPDATED.
+          { guard: "isOnline", actions: "awaitPointer" },
           { guard: "hasMorePlayers", target: "playerHandoff", actions: "nextPlayer" },
           { target: "roundResult" },
+        ],
+        LOBBY_UPDATED: [
+          { guard: "gameFinished", target: "winner", actions: "applyLobby" },
+          { guard: "roundAdvanced", target: "roundResult", actions: "applyLobby" },
+          { guard: "pointerMoved", target: "playerHandoff", actions: "applyLobby" },
+          { actions: "applyLobby" },
         ],
       },
     },
     roundResult: {
       on: {
         NEXT_ROUND: [
+          { guard: "onlineFinished", target: "winner", actions: "clearBusy" },
+          { guard: "isOnline", target: "roundIntro", actions: "nextRoundOnline" },
           { guard: "hasMoreRounds", target: "roundIntro", actions: "nextRound" },
           { target: "winner", actions: "clearBusy" },
         ],

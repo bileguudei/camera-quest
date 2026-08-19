@@ -17,6 +17,8 @@ import { mn } from "@/content/mn";
 import { TIMING } from "@/features/game/domain/config";
 import { formatSeconds, scoreTurn } from "@/features/game/domain/scoring";
 import { useGame } from "@/features/game/application/useGame";
+import { useTurnPreviewPublisher } from "@/features/game/application/useTurnPreview";
+import { useTurnVideoPublisher } from "@/features/game/application/useTurnVideo";
 import { useCameraContext } from "@/features/camera/CameraProvider";
 import { DevPanel } from "camera-quest-dev-panel";
 import { getGameRepository } from "@/features/game/infrastructure/createGameRepository";
@@ -47,6 +49,7 @@ export function Play() {
   const expireTurn = useGame((s) => s.expireTurn);
   const reportSystemError = useGame((s) => s.reportSystemError);
   const quitGame = useGame((s) => s.quitGame);
+  const lobby = useGame((s) => s.lobby);
 
   const { stream } = useCameraContext();
 
@@ -136,6 +139,26 @@ export function Play() {
     onExpired: handleRemoteExpired,
     onLocalMatch: handleLocalMatch,
   });
+  // Waiting players watch this turn live. Local games have nobody to watch.
+  const broadcasting = Boolean(lobby && running && !demo);
+  const [framesNeeded, setFramesNeeded] = useState(true);
+  const { channel: spectatorChannel, watchersOnVideo } = useTurnVideoPublisher({
+    stream,
+    gameId: broadcasting ? (lobby?.gameId ?? null) : null,
+    enabled: broadcasting,
+    onFrameNeeded: setFramesNeeded,
+  });
+  // The JPEG path stops as soon as every watcher is on a peer connection, and
+  // comes back the moment one of them drops to the fallback.
+  useTurnPreviewPublisher({
+    videoRef,
+    channel: broadcasting ? spectatorChannel : null,
+    seat: lobby?.selfSeat ?? null,
+    turnId,
+    enabled: framesNeeded,
+    progress: vision.lock,
+    detections: vision.detections,
+  });
   const wrong = useRejection(vision.rejectedAt ?? 0, vision.note ?? "", running);
   const scanning = vision.status === "ready" && running;
 
@@ -213,6 +236,14 @@ export function Play() {
           />
 
           <ChallengeCard challenge={challenge} />
+
+          {broadcasting && (
+            <p className="mx-auto rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-warn backdrop-blur-[3px]">
+              {watchersOnVideo > 0
+                ? mn.online.broadcastingLive(watchersOnVideo)
+                : mn.online.broadcasting}
+            </p>
+          )}
         </div>
 
         {/* ── Full-camera recognition frame + detection overlay ────────── */}
