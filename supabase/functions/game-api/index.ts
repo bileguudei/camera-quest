@@ -56,7 +56,10 @@ Deno.serve(async (request) => {
   const rpc = (() => {
     switch (parsed.command) {
       case "create-game":
-        return client.rpc("create_game", { p_players: parsed.payload.players });
+        return client.rpc("create_game", {
+          p_players: parsed.payload.players,
+          p_environment: parsed.payload.environment,
+        });
       case "prepare-turn":
         return client.rpc("prepare_turn", {
           p_game_id: parsed.payload.gameId,
@@ -72,12 +75,43 @@ Deno.serve(async (request) => {
         return client.rpc("complete_game", { p_game_id: parsed.payload.gameId });
       case "abandon-game":
         return client.rpc("abandon_game", { p_game_id: parsed.payload.gameId });
+      case "create-online-game":
+        return client.rpc("create_online_game", {
+          p_name: parsed.payload.name,
+          p_environment: parsed.payload.environment,
+        });
+      case "join-game":
+        return client.rpc("join_game", {
+          p_join_code: parsed.payload.joinCode.toUpperCase(),
+          p_name: parsed.payload.name,
+        });
+      case "game-state":
+        return client.rpc("game_state", { p_game_id: parsed.payload.gameId });
+      case "set-ready":
+        return client.rpc("set_player_ready", {
+          p_game_id: parsed.payload.gameId,
+          p_ready: parsed.payload.ready,
+        });
+      case "leave-game":
+        return client.rpc("leave_game", { p_game_id: parsed.payload.gameId });
+      case "start-online-game":
+        return client.rpc("start_online_game", { p_game_id: parsed.payload.gameId });
+      case "advance-turn":
+        return client.rpc("advance_turn_pointer", {
+          p_game_id: parsed.payload.gameId,
+          p_from_round: parsed.payload.fromRound,
+          p_from_seat: parsed.payload.fromSeat,
+        });
     }
   })();
 
   const result = await rpc;
   if (result.error) {
-    const known = ["TURN_EXPIRED", "TURN_NOT_ACTIVE", "GAME_NOT_OWNED", "NO_QUEST_AVAILABLE"];
+    const known = [
+      "TURN_EXPIRED", "TURN_NOT_ACTIVE", "GAME_NOT_OWNED", "NO_QUEST_AVAILABLE",
+      "GAME_NOT_FOUND", "LOBBY_FULL", "LOBBY_CLOSED", "NOT_YOUR_TURN",
+      "TURN_STILL_OPEN", "NOT_ENOUGH_PLAYERS", "JOIN_CODE_UNAVAILABLE",
+    ];
     const code = known.find((value) => result.error.message.includes(value)) ?? "GAME_UNAVAILABLE";
     return json(origin, { code, message: code }, code === "GAME_UNAVAILABLE" ? 503 : 409);
   }

@@ -54,8 +54,11 @@ class SupabaseGateway:
                     "status": "eq.active",
                     "select": (
                         "id,game_id,player_id,status,started_at,deadline_at,"
-                        "quest:quests!inner(id,key,kind,target_class,finger_count,target_color,validator_config),"
-                        "game:games!inner(owner_id)"
+                        "quest:quests!inner(id,key,kind,target_class,target_color,validator_config),"
+                        # Authorization follows the seat, not the table: in an
+                        # online lobby the host's token must not be able to
+                        # validate — and score — another player's turn.
+                        "seat:game_players!inner(owner_id)"
                     ),
                 },
             )
@@ -64,14 +67,14 @@ class SupabaseGateway:
         if response.status_code >= 400:
             raise GatewayUnavailable(f"supabase_status_{response.status_code}")
         rows: list[dict[str, Any]] = response.json()
-        if len(rows) != 1 or rows[0]["game"]["owner_id"] != owner_id:
+        if len(rows) != 1 or rows[0]["seat"]["owner_id"] != owner_id:
             raise TurnUnavailable
         raw = rows[0]
         return ActiveTurn(
             id=raw["id"],
             game_id=raw["game_id"],
             player_id=raw["player_id"],
-            owner_id=raw["game"]["owner_id"],
+            owner_id=raw["seat"]["owner_id"],
             status=raw["status"],
             started_at=raw["started_at"],
             deadline_at=raw["deadline_at"],

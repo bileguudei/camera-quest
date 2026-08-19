@@ -6,7 +6,7 @@ from typing import Protocol
 from app.calibration import CalibrationService
 from app.models.contracts import Detection
 from app.models.gemini_fallback import GeminiObjectFallback
-from app.models.mediapipe_analyzers import MediaPipeFaceAnalyzer, MediaPipeHandAnalyzer
+from app.models.mediapipe_analyzers import MediaPipeFaceAnalyzer
 from app.models.supabase_gateway import SupabaseGateway
 from app.models.telemetry import AttemptTelemetrySink, InlineAttemptTelemetrySink
 from app.security.calibration_token import CalibrationTokenSigner
@@ -15,7 +15,6 @@ from app.security.rate_limit import TurnRateLimiter
 from app.settings import Settings
 from app.validators.base import Frame
 from app.validators.color import ColorValidator
-from app.validators.fingers import FingerValidator
 from app.validators.object import ObjectValidator
 from app.validators.registry import ValidatorRegistry
 from app.validators.smile import SmileValidator
@@ -45,7 +44,6 @@ def build_services(
     detector: ObjectDetectorService,
     attempt_sink: AttemptTelemetrySink | None = None,
 ) -> Services:
-    hands = MediaPipeHandAnalyzer(settings.hand_landmarker_path)
     face = MediaPipeFaceAnalyzer(settings.face_landmarker_path)
     signer = CalibrationTokenSigner(settings.calibration_signing_secret.get_secret_value())
     fallback = None
@@ -65,11 +63,10 @@ def build_services(
         rate_limiter=TurnRateLimiter(),
         gateway=gateway,
         attempts=attempt_sink or InlineAttemptTelemetrySink(gateway),
-        calibration=CalibrationService(detector, hands, face, signer),
+        calibration=CalibrationService(detector, face, signer),
         validators=ValidatorRegistry(
             [
                 ObjectValidator(detector, fallback),
-                FingerValidator(hands),
                 SmileValidator(face),
                 ColorValidator(),
             ]

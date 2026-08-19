@@ -5,9 +5,17 @@ on:
   push:
     branches: [main]
 
+# A superseded push stops paying for the run it replaced.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    # Every job is bounded. GitHub's default is six hours, which is long enough
+    # for a stalled network step to burn a day of minutes before anyone notices.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,6 +31,7 @@ jobs:
 
   browser-flow:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,11 +39,27 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Deliberately not `--with-deps`: that runs apt-get, and the runner's
+      # Ubuntu mirrors can hang for hours with no output. The hosted image
+      # already ships Chromium's system libraries, and if one were ever missing
+      # the e2e run below fails immediately instead of stalling.
+      - name: Install Chromium
+        run: npx playwright install chromium
+        timeout-minutes: 6
+
       - run: npm run test:e2e
+        timeout-minutes: 10
 
   vision:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: vision-service
@@ -53,6 +78,7 @@ jobs:
 
   edge-and-database:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       # Edge tests import npm:zod, so node_modules must exist before Deno
@@ -69,7 +95,9 @@ jobs:
         with:
           version: latest
       - run: npm run test:edge
-      - run: supabase start
+      - name: Start local Supabase
+        run: supabase start
+        timeout-minutes: 10
       - run: supabase db reset
       - run: supabase test db
       - run: npm run generate:database

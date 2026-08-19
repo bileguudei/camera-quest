@@ -1,9 +1,15 @@
 "use client";
 
+import { AppError } from "@/shared/errors/appError";
 import { ROUNDS } from "@/features/game/domain/config";
 import { pickLocalQuest } from "@/features/game/domain/questCatalog";
 import { levelForXp, scoreTurn } from "@/features/game/domain/scoring";
-import type { Player, PreparedTurn, TurnOutcome } from "@/features/game/domain/types";
+import type {
+  GameEnvironment,
+  Player,
+  PreparedTurn,
+  TurnOutcome,
+} from "@/features/game/domain/types";
 import type {
   CreateGameInput,
   GameRepository,
@@ -19,27 +25,33 @@ interface LocalTurn extends PreparedTurn {
 
 const id = () => crypto.randomUUID();
 
+const onlineUnavailable = (): never => {
+  throw new AppError("GAME_UNAVAILABLE", "Онлайн тоглоом зөвхөн Supabase backend дээр ажиллана.");
+};
+
 /** Development/E2E adapter. It is never selected when Supabase env exists. */
 export class LocalGameRepository implements GameRepository {
   readonly mode = "local" as const;
   private players = new Map<string, Player>();
   private usedQuestIds = new Map<string, Set<string>>();
   private turns = new Map<string, LocalTurn>();
+  private environment: GameEnvironment = "home";
 
-  async createGame({ players }: CreateGameInput) {
+  async createGame({ players, environment }: CreateGameInput) {
     this.players.clear();
     this.turns.clear();
     this.usedQuestIds.clear();
+    this.environment = environment;
     const persisted = players.map((player) => ({ ...player, id: id(), profileId: id() }));
     persisted.forEach((player) => this.players.set(player.id, player));
-    return { gameId: id(), players: persisted };
+    return { gameId: id(), environment, players: persisted };
   }
 
   async prepareTurn(input: PrepareTurnInput) {
     const used = this.usedQuestIds.get(input.playerId) ?? new Set<string>();
     const difficulty = ROUNDS[input.round - 1]?.difficulty;
     if (!difficulty) throw new Error("Invalid local round");
-    const challenge = pickLocalQuest(difficulty, used, input.backgroundClasses);
+    const challenge = pickLocalQuest(difficulty, used, input.backgroundClasses, this.environment);
     used.add(challenge.id);
     this.usedQuestIds.set(input.playerId, used);
     const turn: LocalTurn = {
@@ -95,6 +107,20 @@ export class LocalGameRepository implements GameRepository {
 
   async getAccessToken() {
     return "local-development-token";
+  }
+
+  // Online lobbies need the authoritative server; this adapter covers the
+  // single-device flow for development and E2E only.
+  async createOnlineGame(): Promise<never> { return onlineUnavailable(); }
+  async joinGame(): Promise<never> { return onlineUnavailable(); }
+  async readGameState(): Promise<never> { return onlineUnavailable(); }
+  async setReady(): Promise<never> { return onlineUnavailable(); }
+  async startOnlineGame(): Promise<never> { return onlineUnavailable(); }
+  async leaveGame(): Promise<void> {}
+  async advanceTurn(): Promise<never> { return onlineUnavailable(); }
+  subscribeToGame(): () => void { return () => {}; }
+  joinTurnChannel() {
+    return { publishFrame: () => {}, publishSignal: () => {}, close: () => {} };
   }
 
   private requireTurn(turnId: string) {

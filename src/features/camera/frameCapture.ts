@@ -96,6 +96,64 @@ async function encodeCameraFrame(
   return blob;
 }
 
+export const PREVIEW_SIZE = 192;
+export const PREVIEW_QUALITY = 0.4;
+/** A spectator frame rides Realtime, so it stays far below the message limit. */
+export const PREVIEW_MAX_BYTES = 60_000;
+
+let previewSurface: CaptureSurface | null = null;
+
+const previewBlob = (canvas: HTMLCanvasElement) =>
+  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", PREVIEW_QUALITY));
+
+const asDataUrl = (blob: Blob) =>
+  new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  });
+
+/**
+ * A small JPEG data URL of what the player is pointing at, for the phones that
+ * are waiting their turn. Encoding goes through `toBlob`, not `toDataURL`:
+ * the synchronous variant blocks the main thread on every frame, which is what
+ * makes a live view stutter. It is deliberately separate from the scoring
+ * capture — nothing here can slow down or alter what the validator sees.
+ */
+export async function capturePreviewDataUrl(video: HTMLVideoElement): Promise<string | null> {
+  if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) return null;
+  previewSurface ??= (() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = PREVIEW_SIZE;
+    canvas.height = PREVIEW_SIZE;
+    const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    if (!context) throw new AppError("INVALID_FRAME", "Canvas үүсгэж чадсангүй.");
+    return { canvas, context };
+  })();
+
+  const visibleRoi = fullFrameRect();
+  const sourceRoi = roiToVideo(visibleRoi, video);
+  previewSurface.context.drawImage(
+    video,
+    sourceRoi.x * video.videoWidth,
+    sourceRoi.y * video.videoHeight,
+    sourceRoi.w * video.videoWidth,
+    sourceRoi.h * video.videoHeight,
+    0,
+    0,
+    PREVIEW_SIZE,
+    PREVIEW_SIZE,
+  );
+
+  const blob = await previewBlob(previewSurface.canvas);
+  if (!blob) return null;
+  const dataUrl = await asDataUrl(blob);
+  // A frame that will not fit is dropped rather than split: the next one is
+  // milliseconds away and a live view tolerates a gap better than a stall.
+  return dataUrl && dataUrl.length <= PREVIEW_MAX_BYTES ? dataUrl : null;
+}
+
 /** Captures the complete camera area the player can currently see. */
 export async function captureCameraFrame(video: HTMLVideoElement): Promise<Blob> {
   return encodeCameraFrame(video, createCaptureSurface());

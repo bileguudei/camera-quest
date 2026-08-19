@@ -4,6 +4,7 @@ import { ArrowLeft, Camera } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import type { CSSProperties } from "react";
 import { GameButton, IconButton } from "@/features/game/ui/components/GameButton";
+import { EnvironmentPicker } from "@/features/game/ui/components/EnvironmentPicker";
 import { PlayerAvatar } from "@/features/game/ui/components/PlayerAvatar";
 import { Screen, ScreenBody, ScreenFooter } from "@/features/game/ui/components/Screen";
 import { mn } from "@/content/mn";
@@ -68,6 +69,8 @@ export function Setup() {
               );
             })}
           </div>
+
+          <EnvironmentPicker className="mt-6" />
 
           <ul className="mt-6 flex flex-col gap-2.5">
             <AnimatePresence initial={false}>

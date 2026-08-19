@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(30);
+select extensions.plan(51);
 
 select extensions.is(
   (select count(*)::integer from public.quests where key in (
@@ -11,18 +11,57 @@ select extensions.is(
   9,
   'additional curated object quests are seeded'
 );
+select extensions.is(
+  (select count(*)::integer from public.quests where kind::text = 'fingers'),
+  0,
+  'the finger quest is gone from the catalogue'
+);
+select extensions.ok(
+  not exists (
+    select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid
+    where t.typname = 'quest_kind' and e.enumlabel = 'fingers'
+  ),
+  'the finger quest kind is gone from the enum as well'
+);
+-- Five rounds need two easy, two medium and one hard quest in whichever room
+-- the host picked, so every environment keeps a pool deeper than that.
+select extensions.ok(
+  (select bool_and(quests >= 3) from (
+     select count(*) as quests
+     from public.quests q, unnest(q.environments) as e(env)
+     where q.active
+     group by e.env, q.difficulty
+   ) pools),
+  'every environment has a deep enough pool at each difficulty'
+);
+select extensions.is(
+  (select count(distinct e.env)::integer
+   from public.quests q, unnest(q.environments) as e(env)),
+  3,
+  'all three environments are represented in the catalogue'
+);
+-- Object recognition is deliberately untouched by the environment work: no
+-- frame-coverage gate is configured for it.
 select extensions.ok(
   (select bool_and(
-    (validator_config->>'consensus')::integer = 3
-    and (validator_config->>'minPalmSpan')::numeric = 0.06
-  ) from public.quests where kind = 'fingers'),
-  'finger quests use the tolerant three-frame geometry contract'
+     not (validator_config ? 'minArea') and not (validator_config ? 'minAreaWhenSeen')
+   ) from public.quests where kind = 'object'),
+  'object quests carry no frame-coverage gate'
+);
+-- A wall behind the player is desaturated; a real coloured object is not, and
+-- the floor is what keeps the background from passing a colour turn.
+select extensions.ok(
+  (select bool_and(
+     (validator_config->>'saturation')::numeric >= 0.4
+     and (validator_config->>'consensus')::integer >= 4
+   ) from public.quests where kind = 'color'),
+  'colour needs a saturated region held across four frames'
 );
 select extensions.ok(
   (select bool_and(
-    (validator_config->>'consensus')::integer = 3
-    and (validator_config->>'minArea')::numeric = 0.025
-    and (validator_config->>'minRegionArea')::numeric = 0.015
+    (validator_config->>'consensus')::integer = 4
+    and (validator_config->>'minArea')::numeric = 0.06
+    and (validator_config->>'minRegionArea')::numeric = 0.04
   ) from public.quests where kind = 'color'),
   'color quests accept a small coherent object region'
 );
@@ -37,15 +76,20 @@ insert into public.player_profiles
 values
   ('11111111-1111-4111-8111-111111111111', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 1, 'Alpha', '🦊', 'violet', 2, 2);
 
-insert into public.games (id, owner_id)
-values ('22222222-2222-4222-8222-222222222222', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+insert into public.games (id, owner_id, host_id)
+values (
+  '22222222-2222-4222-8222-222222222222',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+);
 
-insert into public.game_players (id, game_id, player_id, seat)
+insert into public.game_players (id, game_id, player_id, seat, owner_id)
 values (
   '33333333-3333-4333-8333-333333333333',
   '22222222-2222-4222-8222-222222222222',
   '11111111-1111-4111-8111-111111111111',
-  1
+  1,
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 );
 
 set local role authenticated;
@@ -326,6 +370,138 @@ select extensions.is(
   ),
   0,
   'device account deletion leaves no owned profiles'
+);
+
+-- ---------------------------------------------------------------------------
+-- Online lobbies: seats belong to phones, not to the host.
+-- ---------------------------------------------------------------------------
+
+insert into auth.users (id, aud, role, email)
+values
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'authenticated', 'authenticated', 'host@example.test'),
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'authenticated', 'authenticated', 'guest@example.test'),
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'authenticated', 'authenticated', 'stranger@example.test');
+
+create temporary table lobby_handle (game_id uuid, code text);
+grant select on lobby_handle to authenticated;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', true);
+select extensions.lives_ok(
+  $$select public.create_online_game('Host')$$,
+  'a phone can open an online table'
+);
+reset role;
+
+insert into lobby_handle
+select id, join_code from public.games
+where host_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+select extensions.matches(
+  (select code from lobby_handle),
+  '^[A-Z0-9]{6}$',
+  'the join code is six unambiguous characters'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', true);
+select extensions.is(
+  (public.join_game((select code from lobby_handle), 'Guest')->>'selfSeat')::integer,
+  2,
+  'the second phone lands in the next free seat'
+);
+select extensions.is(
+  (public.join_game((select code from lobby_handle), 'Guest')->>'selfSeat')::integer,
+  2,
+  'rejoining keeps the original seat instead of taking a second one'
+);
+reset role;
+
+select extensions.is(
+  (select count(*)::integer from public.game_players where game_id = (select game_id from lobby_handle)),
+  2,
+  'a rejoin never allocates a second seat'
+);
+select extensions.is(
+  (select color from public.player_profiles where owner_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+  'blue',
+  'the server assigns the seat colour so two phones cannot share one'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', true);
+select extensions.is(
+  (select count(*)::integer from public.games where id = (select game_id from lobby_handle)),
+  0,
+  'a phone that never joined cannot read the table'
+);
+
+select set_config('request.jwt.claim.sub', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', true);
+select extensions.is(
+  (select count(*)::integer from public.player_profiles
+   where owner_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+  1,
+  'a member can read the scoreboard identity of the phones it plays with'
+);
+
+select extensions.throws_ok(
+  $$select public.start_online_game((select game_id from lobby_handle))$$,
+  '42501',
+  'GAME_NOT_OWNED',
+  'only the host starts the match'
+);
+
+select set_config('request.jwt.claim.sub', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', true);
+select extensions.lives_ok(
+  $$select public.start_online_game((select game_id from lobby_handle))$$,
+  'the host closes the lobby and opens round one'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', true);
+select extensions.throws_ok(
+  $$select public.prepare_turn(
+    (select game_id from lobby_handle),
+    (select player_id from public.game_players
+     where game_id = (select game_id from lobby_handle) and seat = 2),
+    1::smallint,
+    '{}'::text[]
+  )$$,
+  '22023',
+  'NOT_YOUR_TURN',
+  'a phone cannot jump the queue while the pointer points at another seat'
+);
+select extensions.is(
+  (public.advance_turn_pointer((select game_id from lobby_handle), 1::smallint, 1::smallint)
+    ->>'currentSeat')::integer,
+  2,
+  'reporting the finished pointer moves the table to the next seat'
+);
+select extensions.is(
+  (public.advance_turn_pointer((select game_id from lobby_handle), 1::smallint, 1::smallint)
+    ->>'currentSeat')::integer,
+  2,
+  'a second phone reporting the same turn does not skip a player'
+);
+reset role;
+
+-- The spectator channel carries a camera image, so its topic parser must not
+-- authorize anything that is not a real game the caller sits at.
+select extensions.is(
+  public.spectate_game_id('spectate:' || (select game_id from lobby_handle)::text),
+  (select game_id from lobby_handle),
+  'a well-formed spectate topic resolves to its game'
+);
+select extensions.is(
+  public.spectate_game_id('spectate:not-a-uuid'),
+  null,
+  'a malformed topic resolves to no game at all'
+);
+select extensions.is(
+  public.spectate_game_id('games:' || (select game_id from lobby_handle)::text),
+  null,
+  'another topic namespace cannot borrow the spectator policy'
 );
 
 select * from extensions.finish();

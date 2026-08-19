@@ -9,9 +9,8 @@ from pydantic import BaseModel, Field
 class QuestConfig(BaseModel):
     id: str
     key: str
-    kind: Literal["object", "fingers", "smile", "color"]
+    kind: Literal["object", "smile", "color"]
     target_class: str | None = None
-    finger_count: int | None = Field(default=None, ge=1, le=5)
     target_color: Literal["red", "blue", "green", "yellow"] | None = None
     validator_config: dict[str, Any]
 
@@ -33,4 +32,3 @@ class CalibrationClaims(BaseModel):
     background_classes: list[str] = Field(default_factory=list)
     color_ratios: dict[str, float] = Field(default_factory=dict)
     neutral_smile: float = 0
-    hand_present: bool = False

@@ -66,6 +66,72 @@ sequenceDiagram
 
 The visible countdown derives from `deadlineAt + serverClockOffset`, not an incrementing React timer. Background tab throttling therefore does not pause the turn. `resolve_turn` locks the turn and returns the existing result if the same pass arrives twice.
 
+## Environments
+
+A game names the room it is played in — `school`, `home` or `outdoor` — and `prepare_turn` filters
+the quest pool by it, so a fridge is never asked for in a schoolyard. The host chooses once, at
+creation; joining phones inherit it. Every environment keeps more than the five quests a player
+needs, and `quests.environments` is a `game_environment[]` so one object can belong to several rooms.
+
+The finger-counting quest was removed down to the enum value, along with its validator, the hand
+landmarker asset and the calibration baseline that supported it.
+
+## Online tables
+
+A host opens a table with `create_online_game`, which returns a six-character join code; up to five
+more phones call `join_game` with it. Seats, colours and avatars are assigned by the server, so two
+phones can never collide. The lobby closes when the host calls `start_online_game`.
+
+```mermaid
+sequenceDiagram
+  participant H as Host phone
+  participant G as Guest phone
+  participant D as Postgres RPC
+  participant R as Supabase Realtime
+
+  H->>D: create_online_game → join code
+  G->>D: join_game(code) → seat
+  D-->>R: games/game_players change
+  R-->>H: refetch game_state
+  H->>D: start_online_game (lobby closes)
+  loop each turn
+    Note over H,G: only the seat matching games.current_seat opens a camera
+    D-->>R: turns change
+    R-->>G: refetch game_state → spectate, then see the result
+    H->>D: advance_turn_pointer(round, seat)
+  end
+```
+
+`games.current_round`/`current_seat` are the only turn order. `advance_turn_pointer` is a
+compare-and-swap on the pointer the caller observed, so two phones reporting the same finished turn
+move the table exactly once, and any member — not only the host — can advance it or expire a turn
+that is five seconds past its deadline. That is what keeps a dropped phone from freezing the table.
+
+Realtime change events are treated as a signal, not as data: every event triggers a `game_state`
+read, and a slow poll runs behind it so a coalesced or dropped event cannot desynchronize a phone.
+
+While a turn runs, the waiting phones watch it live. Two transports carry that, both over the same
+**private** `spectate:<gameId>` channel, which is authorized by RLS on `realtime.messages` through
+`is_game_member` — never by an unguessable topic:
+
+- **WebRTC** is the primary path. The channel doubles as the signalling bus, so a real peer-to-peer
+  video call needs no server of its own and no paid service: public STUN, no TURN, no SFU. The
+  playing phone is always the offerer — it is the only side with media — so there is no glare to
+  resolve. Each watcher gets its own sender capped at 250 kbps and scaled down 3×, which keeps a
+  five-peer mesh from saturating the uplink the scoring frames also use.
+- **JPEG frames** are the fallback, at 192px and about 12 fps. They carry the view until WebRTC
+  connects and permanently for networks where a direct connection never will. The publisher tracks
+  which watchers reported `transport: "webrtc"` and stops sending frames only once none are left on
+  the fallback. Smoothness there comes from three things: the browser client raises Realtime's
+  default 10 events/second throttle, encoding uses async `toBlob` rather than the main-thread
+  blocking `toDataURL`, and the publisher paces itself so a slow phone drops frames instead of
+  queueing a backlog.
+
+Both payloads arrive from another player's browser and are re-validated with Zod on receipt; the
+image must be a `data:image/jpeg;base64,` URL, and an SDP is length-bounded. The live view is
+presentation only: it is captured separately from the scoring frames, it can never delay a batch or
+change a verdict, and the player sees a banner naming how many people are watching.
+
 ## Code layout and dependency direction
 
 ```text
@@ -95,8 +161,14 @@ Direct imports are intentional. Do not add barrel files or duplicate Supabase se
 ## Data and security invariants
 
 - Anonymous Supabase `auth.uid()` owns every local profile and game. All user-facing tables have RLS.
+- Online tables read by membership, not by ownership: `is_game_member(game_id)` is a security definer
+  function so a policy on `game_players` cannot recurse into itself. Writes stay RPC-only.
+- `game_players.owner_id` is the seat's auth user — the host in a local game, each phone online.
+  Every turn RPC and the vision service authorize against that seat, never against `games.owner_id`.
 - Browser roles can call command RPCs but cannot execute `resolve_turn`, `record_vision_attempt`, or `abort_turn`.
-- Modal verifies JWT signature through Supabase JWKS, issuer, audience, and that `sub` equals the game owner.
+- Modal verifies JWT signature through Supabase JWKS, issuer, audience, and that `sub` equals the
+  owner of the turn's seat. The host of an online table cannot validate — and so cannot score —
+  another player's turn.
 - Vision validates the database quest/config; target, score, model version, and deadline are never trusted from browser fields.
 - `vision_attempts` stores latency/confidence/decision/reason only. No bytea, URL, frame, or image column exists.
 - Non-pass attempt telemetry is queued with Modal `.spawn()` so its idempotent Supabase RPC does
@@ -115,17 +187,13 @@ Direct imports are intentional. Do not add barrel files or duplicate Supabase se
 ## Add a quest using an existing validator
 
 1. Add a new migration that inserts a `quests` row. Do not edit an already-deployed seed migration.
-2. Use one of `object`, `fingers`, `smile`, or `color`, a valid difficulty, and validator config matching that validator.
-3. Ensure each difficulty has enough active quests for five rounds without repeating per player.
+2. Use one of `object`, `smile`, or `color`, a valid difficulty, and validator config matching that validator.
+   Set `environments` to the rooms the quest is plausible in; the default is all three.
+3. Ensure each difficulty has enough active quests **per environment** for five rounds without repeating per player.
 4. Add domain fixture only if local/E2E mode needs the quest.
 5. Run DB reset, pgTAP, contract generation, frontend tests, and live accuracy trials.
 
 Threshold changes belong in `validator_config`; they should not require a frontend or Python code deploy.
-Finger quests additionally accept `minPalmSpan`, `minHandednessConfidence`, and `minFingerReach`
-quality gates. The defaults reject tiny, cropped, uncertain, or geometrically folded hands before
-4-of-5 consensus. World-space joint angles and image-space fingertip reach must both agree, and the
-four matching frames keep the same MediaPipe handedness. Specialist quests may finish after four
-unanimous frames because a fifth frame cannot reverse an already-satisfied 4-of-5 result.
 
 ## Add a validator kind
 

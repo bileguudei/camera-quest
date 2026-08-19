@@ -19,6 +19,7 @@ export const mn = {
       { icon: "⚡", text: "Шууд тоглоно" },
     ],
     how: "Нэг утсаар ээлжлэн тоглоно",
+    onlineCta: "Найзтайгаа онлайн",
   },
 
   setup: {
@@ -30,6 +31,49 @@ export const mn = {
     cta: "Камераа шалгах",
     back: "Буцах",
     hint: "Нэр хоосон бол автоматаар бөглөгдөнө.",
+  },
+
+  environment: {
+    label: "Хаана тоглох вэ?",
+    hint: "Сонгосон орчинд байж болох зүйлс л даалгавар болно.",
+    options: {
+      school: { label: "Сургууль", icon: "🎒", hint: "Анги, ном, ширээ" },
+      home: { label: "Гэр", icon: "🏠", hint: "Гал тогоо, өрөө" },
+      outdoor: { label: "Гадаа", icon: "🌳", hint: "Гудамж, машин, амьтад" },
+    },
+  },
+
+  online: {
+    title: "Онлайн тоглох",
+    sub: "Нэг хүн өрөө үүсгээд, кодоо найзууддаа хэлнэ.",
+    back: "Буцах",
+    nameLabel: "Таны нэр",
+    namePlaceholder: "Нэрээ бичнэ үү",
+    hostCta: "Өрөө үүсгэх",
+    or: "эсвэл",
+    codeLabel: "Өрөөний код",
+    joinCta: "Кодоор нэгдэх",
+    hint: "6 хүртэл хүн өөр өөрийн утаснаасаа тоглоно.",
+    unsupported: "Онлайн тоглоом зөвхөн cloud backend дээр ажиллана.",
+    shareHint: "Энэ кодыг найзууддаа хэл. Тэд «Кодоор нэгдэх» дээр дарна.",
+    you: "(та)",
+    ready: "Бэлэн",
+    waiting: "Хүлээж байна",
+    readyCta: "Би бэлэн",
+    notReadyCta: "Бэлэн биш",
+    startCta: "Тоглоом эхлүүлэх",
+    needPlayers: "Дор хаяж 2 хүн хэрэгтэй",
+    leave: "Өрөөнөөс гарах",
+    seatCount: (count: number) => `${count}/6 тоглогч`,
+    spectating: "Ээлж нь дуустал хүлээнэ үү",
+    searching: "Даалгавраа хайж байна",
+    timeLeft: "Үлдсэн хугацаа",
+    yourTurn: "Таны ээлж — бусад тоглогчид харж байна",
+    broadcasting: "● Бусад тоглогчид таны камерыг харж байна",
+    broadcastingLive: (count: number) => `● ${count} хүн шууд дамжуулалтаар харж байна`,
+    watchingLive: (name: string) => `${name} хайж байна`,
+    waitingForCamera: "Камерын дүрсийг хүлээж байна...",
+    spectatingHint: "Ээлж дуусмагц автоматаар үргэлжилнэ.",
   },
 
   camera: {
@@ -86,6 +130,7 @@ export const mn = {
     reveal: "Даалгавар",
     go: "GO!",
     start: "Бэлэн",
+    waking: "Cloud GPU сэрж байна... ээлж эхлэхийг түр хүлээнэ үү.",
   },
 
   play: {

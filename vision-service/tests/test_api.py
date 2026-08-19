@@ -238,10 +238,10 @@ async def test_continue_verdict_does_not_depend_on_telemetry_write() -> None:
                 deadline_at=datetime.now(UTC) + timedelta(seconds=30),
                 quest=QuestConfig(
                     id="40000000-0000-4000-8000-000000000001",
-                    key="fingers-2",
-                    kind="fingers",
-                    finger_count=2,
-                    validator_config={"consensus": 4},
+                    key="obj-cup",
+                    kind="object",
+                    target_class="cup",
+                    validator_config={"consensus": 3},
                 ),
             )
 
@@ -263,7 +263,7 @@ async def test_continue_verdict_does_not_depend_on_telemetry_write() -> None:
                 passed=False,
                 progress=0.5,
                 confidence=0.5,
-                reason="finger_consensus",
+                reason="object_consensus",
             )
 
     class FakeValidators:
@@ -353,9 +353,8 @@ class StreamGateway:
             deadline_at=datetime.now(UTC) + timedelta(seconds=30),
             quest=QuestConfig(
                 id="40000000-0000-4000-8000-000000000001",
-                key="fingers-2",
-                kind="fingers",
-                finger_count=2,
+                key="smile",
+                kind="smile",
                 validator_config={"consensus": 4},
             ),
         )
@@ -418,7 +417,7 @@ class StreamValidator:
             passed=passed,
             progress=1 if passed else 0.5,
             confidence=1 if passed else 0.5,
-            reason="finger_consensus",
+            reason="object_consensus",
         )
 
 
@@ -427,7 +426,7 @@ class StreamValidators:
         self.validator = validator
 
     def for_kind(self, kind: str) -> StreamValidator:
-        assert kind == "fingers"
+        assert kind == "smile"
         return self.validator
 
 

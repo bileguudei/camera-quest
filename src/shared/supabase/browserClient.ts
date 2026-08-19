@@ -21,6 +21,12 @@ export function getSupabaseBrowserClient(): SupabaseClient<Database> {
         autoRefreshToken: true,
         detectSessionInUrl: false,
       },
+      realtime: {
+        // The SDK default of 10 events/second is a client-side throttle that
+        // would cap the live spectator view at a slideshow. The turn preview
+        // runs at 12fps and still leaves headroom for state changes.
+        params: { eventsPerSecond: 24 },
+      },
     },
   );
   return browserClient;

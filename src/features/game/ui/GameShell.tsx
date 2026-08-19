@@ -6,6 +6,8 @@ import { Calibrating } from "@/features/game/ui/screens/Calibrating";
 import { CameraCheck } from "@/features/game/ui/screens/CameraCheck";
 import { CountdownStart } from "@/features/game/ui/screens/CountdownStart";
 import { Landing } from "@/features/game/ui/screens/Landing";
+import { Lobby } from "@/features/game/ui/screens/Lobby";
+import { OnlineStart } from "@/features/game/ui/screens/OnlineStart";
 import { Play } from "@/features/game/ui/screens/Play";
 import { RoundIntro } from "@/features/game/ui/screens/RoundIntro";
 import { RoundResult } from "@/features/game/ui/screens/RoundResult";
@@ -18,9 +20,12 @@ import { useGame } from "@/features/game/application/useGame";
 import type { Phase } from "@/features/game/domain/types";
 import { CameraProvider } from "@/features/camera/CameraProvider";
 import { GameProvider } from "@/features/game/application/GameProvider";
+import { useLobbySync } from "@/features/game/application/useLobbySync";
 
 const SCREENS: Record<Phase, () => React.JSX.Element | null> = {
   landing: Landing,
+  onlineStart: OnlineStart,
+  lobby: Lobby,
   setup: Setup,
   cameraCheck: CameraCheck,
   roundIntro: RoundIntro,
@@ -40,6 +45,7 @@ const SCREENS: Record<Phase, () => React.JSX.Element | null> = {
  */
 function GameRuntime() {
   const phase = useGame((s) => s.phase);
+  useLobbySync();
   const Current = SCREENS[phase];
 
   return (

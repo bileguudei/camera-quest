@@ -17,7 +17,7 @@
 - [ ] Bright, normal, low light
 - [ ] Built-in and USB webcam where available
 - [ ] Every object: 20 positive + 20 wrong-object trials
-- [ ] Finger counts 1–5; left/right hand; extra person in frame
+- [ ] Each environment (school/home/outdoor) draws only its own objects; extra person in frame
 - [ ] Smile with glasses, mask, and multiple people
 - [ ] Four colors against neutral and already-present baseline
 - [ ] Camera denied, disconnected, tab hidden, slow/offline network
@@ -27,7 +27,7 @@
 
 - [ ] Warm vision p95 ≤ 900 ms
 - [ ] Object true-pass ≥ 90% within 3 seconds
-- [ ] Finger/smile/color true-pass ≥ 95% within 2 seconds
+- [ ] Smile/colour true-pass ≥ 95% within 2 seconds
 - [ ] Wrong-target false-pass ≤ 1%
 - [ ] Duplicate score/XP award = 0
 - [ ] No camera frame in Supabase, Modal logs, or any configured observability event/trace attachment
