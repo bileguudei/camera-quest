@@ -18,10 +18,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The lock-file guard compares against origin/main to tell a real
+          # dependency change from an accidentally rewritten lock file.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Check package-lock.json
+        run: node scripts/check-lockfile.mjs
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
@@ -34,10 +40,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The lock-file guard compares against origin/main to tell a real
+          # dependency change from an accidentally rewritten lock file.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Check package-lock.json
+        run: node scripts/check-lockfile.mjs
       - run: npm ci
 
       - name: Cache Playwright browsers
@@ -81,12 +93,16 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       # Edge tests import npm:zod, so node_modules must exist before Deno
       # resolves the function's npm: dependencies.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Check package-lock.json
+        run: node scripts/check-lockfile.mjs
       - run: npm ci
       - uses: denoland/setup-deno@v2
         with:
