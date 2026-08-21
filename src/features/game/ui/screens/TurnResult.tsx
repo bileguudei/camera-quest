@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowRight, Check, Clock } from "lucide-react";
+import { ArrowRight, Check, Clock, Flame, Trophy } from "lucide-react";
+import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { GameButton } from "@/features/game/ui/components/GameButton";
@@ -9,7 +10,11 @@ import { PlayerAvatar } from "@/features/game/ui/components/PlayerAvatar";
 import { PlayerStrip } from "@/features/game/ui/components/PlayerStrip";
 import { RoundBadge } from "@/features/game/ui/components/RoundBadge";
 import { CountUp } from "@/features/game/ui/components/ScorePopup";
-import { Screen, ScreenBody, ScreenFooter } from "@/features/game/ui/components/Screen";
+import {
+  Screen,
+  ScreenBody,
+  ScreenFooter,
+} from "@/features/game/ui/components/Screen";
 import { mn } from "@/content/mn";
 import { PLAYER_COLOR_HEX } from "@/features/game/domain/config";
 import { formatSeconds } from "@/features/game/domain/scoring";
@@ -25,7 +30,9 @@ export function TurnResult() {
   const isLastRound = useGame((s) => s.isLastRound());
   const advanceTurn = useGame((s) => s.advanceTurn);
   const submitTurnFeedback = useGame((s) => s.submitTurnFeedback);
-  const [feedbackState, setFeedbackState] = useState<"idle" | "pending" | "sent" | "error">("idle");
+  const [feedbackState, setFeedbackState] = useState<
+    "idle" | "pending" | "sent" | "error"
+  >("idle");
 
   if (!outcome) return null;
 
@@ -46,8 +53,10 @@ export function TurnResult() {
         <RoundBadge round={roundIndex + 1} difficulty={round.difficulty} />
       </header>
 
-      <ScreenBody className="flex flex-col justify-center">
-        <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 py-2">
+      <ScreenBody className="flex flex-col justify-center lg:overflow-visible">
+        {/* One vertical narrative, so it stays a single column — it just stops
+            being a 448px sliver adrift on a 1440px screen. */}
+        <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 py-2 lg:max-h-full lg:max-w-[640px] lg:stage-card lg:gap-4 lg:overflow-y-auto lg:no-scrollbar lg:px-12 lg:py-8">
           {/* Verdict */}
           <motion.div
             initial={{ scale: 0.6, opacity: 0 }}
@@ -97,7 +106,11 @@ export function TurnResult() {
 
             <div className="mt-4 grid grid-cols-2 gap-2.5">
               <Stat
-                label={success ? mn.success.seconds(formatSeconds(outcome.timeMs)) : "—"}
+                label={
+                  success
+                    ? mn.success.seconds(formatSeconds(outcome.timeMs))
+                    : "—"
+                }
                 value={success ? formatSeconds(outcome.timeMs) : "—"}
                 unit={success ? "сек" : ""}
               />
@@ -119,9 +132,16 @@ export function TurnResult() {
             </div>
 
             <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-              <ProgressStat label="XP" value={success ? `+${outcome.xp}` : "+0"} />
+              <ProgressStat
+                label="XP"
+                value={success ? `+${outcome.xp}` : "+0"}
+              />
               <ProgressStat label="Түвшин" value={String(outcome.level)} />
-              <ProgressStat label="Streak" value={`🔥 ${outcome.streak}`} />
+              <ProgressStat
+                label="Streak"
+                value={String(outcome.streak)}
+                icon={<Flame className="size-4 text-warn" strokeWidth={2.6} />}
+              />
             </div>
 
             {outcome.unlockedAchievementIds.length > 0 && (
@@ -133,9 +153,10 @@ export function TurnResult() {
                   {outcome.unlockedAchievementIds.map((id) => (
                     <span
                       key={id}
-                      className="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-bold text-primary"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-bold text-primary"
                     >
-                      🏆 {achievementName(id)}
+                      <Trophy className="size-3.5" strokeWidth={2.6} />
+                      {achievementName(id)}
                     </span>
                   ))}
                 </div>
@@ -144,7 +165,9 @@ export function TurnResult() {
           </GameCard>
 
           {!success && (
-            <p className="text-center text-sm text-ink-3">{mn.fail.encourage}</p>
+            <p className="text-center text-sm text-ink-3">
+              {mn.fail.encourage}
+            </p>
           )}
 
           <button
@@ -168,11 +191,26 @@ export function TurnResult() {
                 : "AI буруу танив уу?"}
           </button>
 
-          <PlayerStrip players={players} activeId={outcome.playerId} className="mt-1" />
+          <PlayerStrip
+            players={players}
+            activeId={outcome.playerId}
+            className="mt-1"
+          />
+
+          {/* The action rides inside the card on desktop; a floating footer
+              button landed on top of the card's own bottom edge. */}
+          <div className="mt-1 hidden w-full lg:block">
+            <GameButton
+              onClick={advanceTurn}
+              iconRight={<ArrowRight className="size-6" strokeWidth={2.8} />}
+            >
+              {ctaLabel}
+            </GameButton>
+          </div>
         </div>
       </ScreenBody>
 
-      <ScreenFooter>
+      <ScreenFooter className="lg:hidden">
         <GameButton
           onClick={advanceTurn}
           iconRight={<ArrowRight className="size-6" strokeWidth={2.8} />}
@@ -184,11 +222,24 @@ export function TurnResult() {
   );
 }
 
-function ProgressStat({ label, value }: { label: string; value: string }) {
+function ProgressStat({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: ReactNode;
+}) {
   return (
     <div className="rounded-g2 bg-surface-2/50 px-1 py-2">
-      <p className="font-display text-base font-black text-ink sm:text-lg">{value}</p>
-      <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-3">{label}</p>
+      <p className="flex items-center justify-center gap-1 font-display text-base font-black text-ink sm:text-lg">
+        {icon}
+        {value}
+      </p>
+      <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-3">
+        {label}
+      </p>
     </div>
   );
 }
@@ -219,7 +270,9 @@ function Stat({
       >
         {value}
       </span>
-      <span className="truncate text-xs font-semibold text-ink-3">{unit || label}</span>
+      <span className="truncate text-xs font-semibold text-ink-3">
+        {unit || label}
+      </span>
     </div>
   );
 }

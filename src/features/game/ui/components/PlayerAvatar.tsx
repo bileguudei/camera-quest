@@ -1,19 +1,29 @@
 import type { CSSProperties } from "react";
 import { PLAYER_COLOR_HEX } from "@/features/game/domain/config";
 import type { Player } from "@/features/game/domain/types";
+import { SeatMark } from "./SeatMark";
 
 type Size = "xs" | "sm" | "md" | "lg" | "xl";
 
 const SIZES: Record<Size, string> = {
-  xs: "size-8 text-base rounded-g1",
-  sm: "size-11 text-xl rounded-g1",
-  md: "size-14 text-2xl rounded-g2",
-  lg: "size-20 text-4xl rounded-g3",
-  xl: "size-28 text-6xl rounded-g4 sm:size-32",
+  xs: "size-8 rounded-g1",
+  sm: "size-11 rounded-g1",
+  md: "size-14 rounded-g2",
+  lg: "size-20 rounded-g3",
+  xl: "size-28 rounded-g4 sm:size-32",
+};
+
+/** The mark sits at roughly half the tile, the way an app icon does. */
+const MARK_SIZES: Record<Size, string> = {
+  xs: "size-4",
+  sm: "size-5",
+  md: "size-7",
+  lg: "size-10",
+  xl: "size-14",
 };
 
 interface PlayerAvatarProps {
-  player: Pick<Player, "avatar" | "color" | "name">;
+  player: Pick<Player, "seat" | "color" | "name">;
   size?: Size;
   active?: boolean;
   className?: string;
@@ -33,6 +43,7 @@ export function PlayerAvatar({
       style={
         {
           "--pc": color,
+          color,
           backgroundColor: `color-mix(in oklab, ${color} 22%, var(--surface))`,
           borderColor: `color-mix(in oklab, ${color} 70%, transparent)`,
           boxShadow: active
@@ -47,7 +58,7 @@ export function PlayerAvatar({
         className,
       ].join(" ")}
     >
-      {player.avatar}
+      <SeatMark seat={player.seat} className={MARK_SIZES[size]} />
     </span>
   );
 }

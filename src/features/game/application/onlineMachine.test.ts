@@ -9,7 +9,7 @@ const seat = (n: number, overrides: Partial<LobbyPlayer> = {}): LobbyPlayer => (
   seat: n,
   name: `Player ${n}`,
   color: "violet",
-  avatar: "🦊",
+  avatar: "aperture",
   score: 0,
   totalXp: 0,
   level: 1,

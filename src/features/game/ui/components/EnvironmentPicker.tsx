@@ -3,6 +3,7 @@
 import { mn } from "@/content/mn";
 import { useGame } from "@/features/game/application/useGame";
 import type { GameEnvironment } from "@/features/game/domain/types";
+import { EnvironmentIcon } from "./SeatMark";
 
 const ORDER: GameEnvironment[] = ["school", "home", "outdoor"];
 
@@ -40,9 +41,7 @@ export function EnvironmentPicker({ className = "" }: { className?: string }) {
                   : "border-line bg-surface/60 text-ink-2 hover:border-line/80",
               ].join(" ")}
             >
-              <span aria-hidden className="text-2xl">
-                {option.icon}
-              </span>
+              <EnvironmentIcon environment={key} className="size-6" />
               <span className="font-display text-sm font-black leading-tight">{option.label}</span>
               <span className="text-[0.7rem] leading-tight text-ink-3">{option.hint}</span>
             </button>

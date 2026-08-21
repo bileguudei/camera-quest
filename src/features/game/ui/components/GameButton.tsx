@@ -2,7 +2,13 @@
 
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
 
-type Variant = "primary" | "accent" | "ghost" | "danger" | "tint";
+/**
+ * Three variants, deliberately. `accent` duplicated primary's job and made it
+ * unclear which action was the main one; `tint` painted a button in each
+ * player's colour and turned a screen into a rainbow. Player colour now lives
+ * on the seat mark, where it identifies someone instead of shouting.
+ */
+type Variant = "primary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 interface GameButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,9 +17,6 @@ interface GameButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   block?: boolean;
   icon?: ReactNode;
   iconRight?: ReactNode;
-  /** For `variant="tint"` — the player's identity colour. */
-  tint?: string;
-  tintDeep?: string;
 }
 
 const SIZES: Record<Size, string> = {
@@ -25,16 +28,13 @@ const SIZES: Record<Size, string> = {
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-primary text-primary-ink btn-3d",
-  accent: "bg-accent text-white btn-3d",
   danger: "bg-danger text-[#2b0710] btn-3d",
-  tint: "text-[#0b0d1c] btn-3d",
   ghost:
     "bg-surface-2/70 text-ink border border-line/80 hover:bg-surface-3/80 active:translate-y-[2px] transition",
 };
 
 const EDGES: Partial<Record<Variant, string>> = {
   primary: "var(--primary-deep)",
-  accent: "var(--accent-deep)",
   danger: "var(--danger-deep)",
 };
 
@@ -44,17 +44,14 @@ export function GameButton({
   block = true,
   icon,
   iconRight,
-  tint,
-  tintDeep,
   className = "",
   style,
   children,
   ...rest
 }: GameButtonProps) {
   const custom: CSSProperties = {
-    ...(variant === "tint" && tint ? { backgroundColor: tint } : null),
-    ...(EDGES[variant] || tintDeep
-      ? ({ "--btn-edge": tintDeep ?? EDGES[variant] } as CSSProperties)
+    ...(EDGES[variant]
+      ? ({ "--btn-edge": EDGES[variant] } as CSSProperties)
       : null),
     ...style,
   };

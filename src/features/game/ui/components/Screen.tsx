@@ -59,6 +59,26 @@ export function Backdrop() {
         className="absolute bottom-[-24%] left-[12%] size-[58vmin] rounded-full opacity-16 blur-[90px]"
         style={{ background: "radial-gradient(circle, var(--primary), transparent 66%)" }}
       />
+
+      {/* A sensor grid and a vignette: flat fills on flat navy read as a
+          wireframe, and these two cost nothing to paint. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgb(255 255 255 / 0.028) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.028) 1px, transparent 1px)",
+          backgroundSize: "34px 34px",
+          maskImage: "radial-gradient(120% 90% at 50% 8%, #000 20%, transparent 78%)",
+          WebkitMaskImage: "radial-gradient(120% 90% at 50% 8%, #000 20%, transparent 78%)",
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 78% at 50% 42%, transparent 42%, rgb(3 5 12 / 0.66) 100%)",
+        }}
+      />
     </div>
   );
 }

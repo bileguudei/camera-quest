@@ -13,16 +13,12 @@ export const mn = {
 
   landing: {
     cta: "Тоглоом эхлүүлэх",
-    chips: [
-      { icon: "📷", text: "Камертай тоглоно" },
-      { icon: "👥", text: "1–6 тоглогч" },
-      { icon: "⚡", text: "Шууд тоглоно" },
-    ],
     how: "Нэг утсаар ээлжлэн тоглоно",
     onlineCta: "Найзтайгаа онлайн",
   },
 
   setup: {
+    rosterLabel: "Тоглогчид",
     title: "Хэдүүлээ тоглох вэ?",
     sub: "Тоглогчийн тоог сонгоод нэрээ бичээрэй.",
     countLabel: "Тоглогчийн тоо",
@@ -37,9 +33,9 @@ export const mn = {
     label: "Хаана тоглох вэ?",
     hint: "Сонгосон орчинд байж болох зүйлс л даалгавар болно.",
     options: {
-      school: { label: "Сургууль", icon: "🎒", hint: "Анги, ном, ширээ" },
-      home: { label: "Гэр", icon: "🏠", hint: "Гал тогоо, өрөө" },
-      outdoor: { label: "Гадаа", icon: "🌳", hint: "Гудамж, машин, амьтад" },
+      school: { label: "Сургууль", hint: "Анги, ном, ширээ" },
+      home: { label: "Гэр", hint: "Гал тогоо, өрөө" },
+      outdoor: { label: "Гадаа", hint: "Гудамж, машин, амьтад" },
     },
   },
 
@@ -55,7 +51,15 @@ export const mn = {
     joinCta: "Кодоор нэгдэх",
     hint: "6 хүртэл хүн өөр өөрийн утаснаасаа тоглоно.",
     unsupported: "Онлайн тоглоом зөвхөн cloud backend дээр ажиллана.",
-    shareHint: "Энэ кодыг найзууддаа хэл. Тэд «Кодоор нэгдэх» дээр дарна.",
+    shareHint: "Холбоосыг найздаа илгээ, эсвэл кодоо хэл.",
+    inviteCta: "Найзаа урих",
+    copyCodeCta: "Код хуулах",
+    inviteText: (code: string) =>
+      `Camera Quest тоглоцгооё! Өрөөний код: ${code}`,
+    shared: "Илгээлээ",
+    copied: "Хуулагдлаа",
+    copyFailed: "Хуулж чадсангүй — холбоосоо гараар хуулна уу:",
+    invited: "Найз чинь урьсан байна. Нэрээ бичээд нэгдээрэй.",
     you: "(та)",
     ready: "Бэлэн",
     waiting: "Хүлээж байна",
@@ -63,6 +67,13 @@ export const mn = {
     notReadyCta: "Бэлэн биш",
     startCta: "Тоглоом эхлүүлэх",
     needPlayers: "Дор хаяж 2 хүн хэрэгтэй",
+    waitingAll: "Бүгд бэлэн болмогц эхэлнэ",
+    players: "Тоглогчид",
+    emptySeat: "Сул суудал",
+    factRounds: "5 раунд · ээлж бүр 30 секунд",
+    factWatch: "Хүлээж байхдаа бусдын камерыг шууд харна",
+    inheritHint:
+      "Нэгдэж буй тоглогч орчноо сонгохгүй — өрөөний эзний сонгосон орчныг өвлөнө.",
     leave: "Өрөөнөөс гарах",
     seatCount: (count: number) => `${count}/6 тоглогч`,
     spectating: "Ээлж нь дуустал хүлээнэ үү",
@@ -70,7 +81,8 @@ export const mn = {
     timeLeft: "Үлдсэн хугацаа",
     yourTurn: "Таны ээлж — бусад тоглогчид харж байна",
     broadcasting: "● Бусад тоглогчид таны камерыг харж байна",
-    broadcastingLive: (count: number) => `● ${count} хүн шууд дамжуулалтаар харж байна`,
+    broadcastingLive: (count: number) =>
+      `● ${count} хүн шууд дамжуулалтаар харж байна`,
     watchingLive: (name: string) => `${name} хайж байна`,
     waitingForCamera: "Камерын дүрсийг хүлээж байна...",
     spectatingHint: "Ээлж дуусмагц автоматаар үргэлжилнэ.",
@@ -82,7 +94,10 @@ export const mn = {
     steps: {
       camera: { pending: "Камер шалгаж байна...", done: "Камер холбогдлоо" },
       model: { pending: "AI model ачаалж байна...", done: "AI model ачааллаа" },
-      ready: { pending: "AI model бэлдэж байна...", done: "Таних систем бэлэн" },
+      ready: {
+        pending: "AI model бэлдэж байна...",
+        done: "Таних систем бэлэн",
+      },
     },
     allReady: "Бүх зүйл бэлэн!",
     switch: "Камер солих",
@@ -179,7 +194,6 @@ export const mn = {
   },
 
   winner: {
-    crown: "🏆",
     title: (name: string) => `${name} ЯЛЛАА!`,
     tie: "ТЭНЦЛЭЭ!",
     points: (p: number) => `${p} оноо`,
