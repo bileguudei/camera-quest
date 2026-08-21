@@ -30,7 +30,20 @@ export const PLAYER_COLOR_DEEP: Record<PlayerColorKey, string> = {
   cyan: "#128e99",
 };
 
-export const SEAT_AVATARS = ["🦊", "🐼", "🐯", "🐸", "🦉", "🐙"];
+/**
+ * Seat identity is drawn by `SeatMark` from the seat number, so this only
+ * names the mark for the API and the stored profile — nothing renders it.
+ * The server's `seat_avatar()` still writes the old glyph for online seats;
+ * neither value reaches the screen.
+ */
+export const SEAT_AVATARS = [
+  "aperture",
+  "focus",
+  "shutter",
+  "lens",
+  "flash",
+  "viewfinder",
+];
 
 export const ROUNDS: RoundConfig[] = [
   { index: 1, difficulty: "easy", seconds: 30 },

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { motion } from "motion/react";
-import { Play, Trophy, Camera, Users, Zap, Flame, Sparkles } from "lucide-react";
+import { Play, Camera, Users, Zap, Sparkles } from "lucide-react";
 import { GameButton } from "@/features/game/ui/components/GameButton";
 import { Screen, ScreenFooter } from "@/features/game/ui/components/Screen";
 import { mn } from "@/content/mn";
@@ -13,23 +13,48 @@ const fadeUp = {
   show: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: 0.06 * i, type: "spring" as const, stiffness: 260, damping: 22 },
+    transition: {
+      delay: 0.06 * i,
+      type: "spring" as const,
+      stiffness: 260,
+      damping: 22,
+    },
   }),
 };
 
 const FEATURE_CARDS = [
-  { icon: Camera, color: "purple" as const, title: "Камертай тоглоно", desc: "Камераа ашиглан даалгавар хайж биелүүл." },
-  { icon: Users, color: "purple" as const, title: "1-6 тоглогч", desc: "Найзуудтайгаа хамтдаа өрсөлдөөрэй." },
-  { icon: Zap, color: "primary" as const, title: "Шууд тоглоно", desc: "Санамсаргүй тоглогчидтой шууд тоглоорой." },
+  {
+    icon: Camera,
+    color: "purple" as const,
+    title: "Камертай тоглоно",
+    desc: "Камераа ашиглан даалгавар хайж биелүүл.",
+  },
+  {
+    icon: Users,
+    color: "purple" as const,
+    title: "1-6 тоглогч",
+    desc: "Найзуудтайгаа хамтдаа өрсөлдөөрэй.",
+  },
+  {
+    icon: Zap,
+    color: "primary" as const,
+    title: "Шууд тоглоно",
+    desc: "Санамсаргүй тоглогчидтой шууд тоглоорой.",
+  },
 ];
 
+/**
+ * One stage, never a scroll. Every block is sized against the viewport height
+ * so a 667px phone and a 900px laptop both fit without clipping a word.
+ */
 export function Landing() {
   const openSetup = useGame((s) => s.openSetup);
+  const openOnline = useGame((s) => s.openOnline);
 
   return (
     <Screen className="justify-between">
       {/* Top nav */}
-      <div className="flex items-center justify-between px-1 pt-1">
+      <div className="flex shrink-0 items-center justify-between px-1 pt-1">
         <div className="flex items-center gap-1.5">
           <span className="grid size-7 place-items-center rounded-lg bg-primary/15 text-primary">
             <Camera className="size-4" strokeWidth={2} />
@@ -38,25 +63,24 @@ export function Landing() {
             CAMERA <span className="text-primary">QUEST</span>
           </span>
         </div>
-        <button className="flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-ink shadow-[0_2px_0_rgba(0,0,0,0.25)]">
-          <Trophy className="size-3.5" strokeWidth={2.5} />
-          Шилдэг сорил
-        </button>
       </div>
 
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden py-1">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-[clamp(0.25rem,1.4vh,0.875rem)] overflow-hidden">
         {/* Background image */}
         <div className="pointer-events-none absolute inset-0 z-0">
           <Image
             src="/images/background2.png"
             alt=""
             fill
-            className="object-cover opacity-15 scale-125"
-            style={{
-              maskImage: "radial-gradient(ellipse at center, black 30%, transparent 70%)",
-              WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 70%)",
-            }}
+            sizes="100vw"
             priority
+            className="scale-125 object-cover opacity-[0.09]"
+            style={{
+              maskImage:
+                "radial-gradient(ellipse at center, black 14%, transparent 52%)",
+              WebkitMaskImage:
+                "radial-gradient(ellipse at center, black 14%, transparent 52%)",
+            }}
           />
         </div>
 
@@ -76,17 +100,27 @@ export function Landing() {
           variants={fadeUp}
           initial="hidden"
           animate="show"
-          className="relative z-10"
+          className="relative z-10 shrink-0"
         >
-          <Sparkles className="absolute -left-6 top-6 size-5 text-primary/70 animate-pulse" strokeWidth={2} />
-          <Sparkles className="absolute -right-5 bottom-8 size-4 text-purple-300/70 animate-pulse [animation-delay:400ms]" strokeWidth={2} />
+          <Sparkles
+            className="absolute -left-6 top-6 size-5 text-primary/70 animate-pulse"
+            strokeWidth={2}
+          />
+          <Sparkles
+            className="absolute -right-5 bottom-8 size-4 text-purple-300/70 animate-pulse [animation-delay:400ms]"
+            strokeWidth={2}
+          />
+          {/* 612×408 is the file's own ratio — declaring a square one made Next
+              warn and stretched the mascot. Height drives the size so the
+              artwork shrinks with the viewport instead of being cut off. */}
           <Image
             src="/images/camera-mascot.png"
             alt="Camera Quest mascot"
-            width={260}
-            height={260}
+            width={612}
+            height={408}
             priority
-            className="anim-float drop-shadow-[0_0_50px_rgba(163,255,92,0.35)]"
+            sizes="(min-width: 768px) 24rem, 70vw"
+            className="anim-float h-[clamp(5rem,23vh,15rem)] w-auto drop-shadow-[0_0_50px_rgba(163,255,92,0.35)]"
           />
         </motion.div>
 
@@ -95,12 +129,17 @@ export function Landing() {
           variants={fadeUp}
           initial="hidden"
           animate="show"
-          className="relative z-10 text-center font-display font-black leading-[0.86] tracking-tighter"
+          className="relative z-10 shrink-0 text-center font-display font-black leading-[0.86] tracking-tighter"
         >
-          <span className="block text-[clamp(2.25rem,11vw,4rem)] text-ink">CAMERA</span>
+          <span className="block text-[clamp(2rem,min(12vw,8.5vh),4.5rem)] text-ink">
+            CAMERA
+          </span>
           <span
-            className="block text-[clamp(2.25rem,11vw,4rem)] text-primary"
-            style={{ textShadow: "0 0 40px color-mix(in oklab, var(--primary) 50%, transparent)" }}
+            className="block text-[clamp(2rem,min(12vw,8.5vh),4.5rem)] text-primary"
+            style={{
+              textShadow:
+                "0 0 40px color-mix(in oklab, var(--primary) 50%, transparent)",
+            }}
           >
             QUEST
           </span>
@@ -111,7 +150,7 @@ export function Landing() {
           variants={fadeUp}
           initial="hidden"
           animate="show"
-          className="relative z-10 text-center text-base font-bold text-ink"
+          className="relative z-10 shrink-0 text-center text-[clamp(0.9375rem,2vh,1.375rem)] font-bold text-ink"
         >
           {mn.brand.tagline}
         </motion.p>
@@ -121,7 +160,7 @@ export function Landing() {
           variants={fadeUp}
           initial="hidden"
           animate="show"
-          className="relative z-10 max-w-[19rem] text-balance text-center text-xs leading-relaxed text-ink sm:text-sm"
+          className="relative z-10 hidden max-w-[19rem] shrink-0 text-balance text-center text-[clamp(0.75rem,1.6vh,1rem)] leading-relaxed text-ink-2 [@media(min-height:760px)]:block md:max-w-md"
         >
           {mn.brand.sub}
         </motion.p>
@@ -131,7 +170,7 @@ export function Landing() {
           variants={fadeUp}
           initial="hidden"
           animate="show"
-          className="relative z-10 mt-1 flex items-center gap-1 text-xs font-bold text-ink"
+          className="relative z-10 hidden shrink-0 items-center gap-1 text-xs font-bold text-ink-2 [@media(min-height:800px)]:flex"
         >
           <Sparkles className="size-3.5 text-primary" strokeWidth={2} />
           Тоглоомын горим
@@ -143,24 +182,40 @@ export function Landing() {
           variants={fadeUp}
           initial="hidden"
           animate="show"
-          className="relative z-10 grid w-full max-w-sm grid-cols-3 gap-2 px-2"
+          className="relative z-10 grid w-full max-w-sm shrink-0 grid-cols-3 gap-2 px-2 md:max-w-xl md:gap-3"
         >
           {FEATURE_CARDS.map((f) => {
             const Icon = f.icon;
             const isPurple = f.color === "purple";
-            const ring = isPurple ? "border-purple-400/40 text-purple-300" : "border-primary/40 text-primary";
-            const cardBorder = isPurple ? "border-purple-400/20" : "border-primary/20";
+            const ring = isPurple
+              ? "border-purple-400/40 text-purple-300"
+              : "border-primary/40 text-primary";
+            const cardBorder = isPurple
+              ? "border-purple-400/25"
+              : "border-primary/25";
             const titleColor = isPurple ? "text-purple-300" : "text-primary";
             return (
               <div
                 key={f.title}
-                className={`flex flex-col items-center gap-1.5 rounded-xl border bg-ink/40 px-2 py-3 text-center ${cardBorder}`}
+                /* An opaque surface: `bg-ink/40` let the photo behind show
+                   through, so the three cards read as three different colours. */
+                className={`flex flex-col items-center gap-1.5 rounded-xl border bg-surface-2/90 px-2 py-2.5 text-center md:gap-2 md:px-3 md:py-4 ${cardBorder}`}
               >
-                <span className={`grid size-9 place-items-center rounded-full border ${ring}`}>
-                  <Icon className="size-4" strokeWidth={2} />
+                <span
+                  className={`grid size-8 shrink-0 place-items-center rounded-full border md:size-11 ${ring}`}
+                >
+                  <Icon className="size-4 md:size-5" strokeWidth={2} />
                 </span>
-                <p className={`text-[11px] font-bold ${titleColor}`}>{f.title}</p>
-                <p className="text-[9px] leading-tight text-ink">{f.desc}</p>
+                <p
+                  /* A fixed two-line box keeps the three descriptions on one baseline
+                     however the titles wrap. */
+                  className={`grid min-h-[2.2em] place-items-center text-[11px] font-bold leading-tight md:text-sm ${titleColor}`}
+                >
+                  {f.title}
+                </p>
+                <p className="hidden text-[10px] leading-snug text-ink-2 [@media(min-height:620px)]:block md:text-xs">
+                  {f.desc}
+                </p>
               </div>
             );
           })}
@@ -168,8 +223,20 @@ export function Landing() {
       </div>
 
       <ScreenFooter>
-        <motion.div custom={6} variants={fadeUp} initial="hidden" animate="show" className="flex flex-col items-center gap-3">
-          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+        <motion.div
+          custom={6}
+          variants={fadeUp}
+          initial="hidden"
+          animate="show"
+          className="flex flex-col gap-2.5"
+        >
+          {/* w-full: without it the wrapper shrank to the label and the two
+              buttons ended up different widths. */}
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full"
+          >
             <GameButton
               onClick={openSetup}
               icon={<Play className="size-6 fill-current" strokeWidth={0} />}
@@ -178,14 +245,16 @@ export function Landing() {
             </GameButton>
           </motion.div>
 
-          <div className="flex items-center gap-2 text-xs text-ink">
-            <span className="flex items-center gap-1 font-semibold text-ink">
-              <Flame className="size-3.5 text-primary" strokeWidth={2.5} />
-              Өнөөдрийн сорил
-            </span>
-            <span className="text-ink/50">|</span>
-            <span className="font-medium text-primary">3 шинэ даалгавар</span>
-          </div>
+          {/* The only way into an online table; a landing redesign that drops
+              this makes the whole multiplayer flow unreachable. */}
+          <GameButton
+            variant="ghost"
+            size="md"
+            onClick={openOnline}
+            icon={<Users className="size-5" strokeWidth={2.6} />}
+          >
+            {mn.landing.onlineCta}
+          </GameButton>
         </motion.div>
       </ScreenFooter>
     </Screen>

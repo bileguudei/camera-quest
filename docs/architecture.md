@@ -117,9 +117,9 @@ While a turn runs, the waiting phones watch it live. Two transports carry that, 
 - **WebRTC** is the primary path. The channel doubles as the signalling bus, so a real peer-to-peer
   video call needs no server of its own and no paid service: public STUN, no TURN, no SFU. The
   playing phone is always the offerer — it is the only side with media — so there is no glare to
-  resolve. Each watcher gets its own sender capped at 250 kbps and scaled down 3×, which keeps a
-  five-peer mesh from saturating the uplink the scoring frames also use.
-- **JPEG frames** are the fallback, at 192px and about 12 fps. They carry the view until WebRTC
+  resolve. Each watcher gets a detail-biased 640×360-class sender capped at 500 kbps and 20 fps,
+  which keeps a five-peer mesh bounded without reducing small objects to a 240p blur.
+- **JPEG frames** are the fallback, at 288px and about 10 fps with adaptive JPEG quality. They carry the view until WebRTC
   connects and permanently for networks where a direct connection never will. The publisher tracks
   which watchers reported `transport: "webrtc"` and stops sending frames only once none are left on
   the fallback. Smoothness there comes from three things: the browser client raises Realtime's

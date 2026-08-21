@@ -31,7 +31,7 @@ const object = (
     prompt,
     difficulty,
     targetClass,
-    validatorConfig: { confidence: 0.65, borderlineMin: 0.45, consensus: 3 },
+    validatorConfig: { confidence: 0.55, borderlineMin: 0.45, consensus: 2 },
   },
 });
 
@@ -51,7 +51,13 @@ const color = (
     difficulty,
     color: name,
     hex,
-    validatorConfig: { minArea: 0.06, minRegionArea: 0.04, saturation: 0.4, value: 0.25, consensus: 4 },
+    validatorConfig: {
+      minArea: 0.025,
+      minRegionArea: 0.015,
+      saturation: name === "red" ? 0.36 : 0.3,
+      value: 0.18,
+      consensus: 3,
+    },
   },
 });
 
@@ -79,7 +85,7 @@ const LOCAL_QUESTS: LocalQuest[] = [
   object("obj-scissors", "Хайч", "ХАЙЧ ОЛ", "hard", "scissors", ["school", "home"]),
 
   // Home only
-  object("obj-carrot", "Лууван", "ЛУУВАН ОЛ", "easy", "carrot", ["home", "school"]),
+  object("obj-carrot", "Лууван", "ЛУУВАН ОЛ", "easy", "carrot", ["home"]),
   object("obj-couch", "Буйдан", "БУЙДАН ОЛ", "easy", "couch", ["home"], false),
   object("obj-bed", "Ор", "ОР ОЛ", "easy", "bed", ["home"], false),
   object("obj-spoon", "Халбага", "ХАЛБАГА ОЛ", "medium", "spoon", ["home"]),

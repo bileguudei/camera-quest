@@ -190,6 +190,107 @@ button {
   }
 }
 
+/* ==========================================================================
+   Stage — the desktop shell
+   A phone column stretched across 1280px left a void down the middle. From
+   `lg` the game becomes a centred card instead, and the phone layout is the
+   narrow case of the same markup.
+   ========================================================================== */
+
+@utility stage-card {
+  position: relative;
+  border-radius: 34px;
+  border: 1px solid color-mix(in oklab, var(--line) 52%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--surface-2) 40%, transparent), transparent 38%),
+    radial-gradient(90% 70% at 50% -10%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 62%),
+    color-mix(in oklab, var(--surface) 52%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 50px 120px -58px rgb(0 0 0 / 1),
+    0 0 110px -60px color-mix(in oklab, var(--accent) 75%, transparent);
+
+  /* Viewfinder brackets: the game's own language on its own container. */
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    z-index: 3;
+    width: 26px;
+    height: 26px;
+    pointer-events: none;
+    border-color: color-mix(in oklab, var(--primary) 62%, transparent);
+  }
+  &::before {
+    left: 14px;
+    top: 14px;
+    border-left: 2px solid;
+    border-top: 2px solid;
+    border-top-left-radius: 14px;
+  }
+  &::after {
+    right: 14px;
+    bottom: 14px;
+    border-right: 2px solid;
+    border-bottom: 2px solid;
+    border-bottom-right-radius: 14px;
+  }
+}
+
+/* Hairline under a stage header — brand gradient rather than a flat rule. */
+@utility stage-rule {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--primary) 55%, transparent) 22%,
+      color-mix(in oklab, var(--accent) 50%, transparent) 62%,
+      transparent
+    );
+  }
+}
+
+/* Vertical divider between stage columns, faded at both ends. */
+@utility stage-divide {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7%;
+    bottom: 7%;
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      color-mix(in oklab, var(--line) 95%, transparent) 16%,
+      color-mix(in oklab, var(--line) 95%, transparent) 84%,
+      transparent
+    );
+  }
+}
+
+/* Small caps label with its own tick — tiny type needs an anchor. */
+@utility eyebrow-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.5625rem;
+  &::before {
+    content: "";
+    flex-shrink: 0;
+    width: 14px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--primary);
+  }
+}
+
 @utility card-soft {
   background: color-mix(in oklab, var(--surface) 92%, transparent);
   border: 1px solid color-mix(in oklab, var(--line) 70%, transparent);

@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import type { CSSProperties } from "react";
 import { PLAYER_COLOR_HEX } from "@/features/game/domain/config";
 import type { Player } from "@/features/game/domain/types";
+import { SeatMark } from "./SeatMark";
 
 interface PlayerScoreProps {
   player: Player;
@@ -35,9 +36,9 @@ export function PlayerScore({ player, active = false, compact = false }: PlayerS
       }
       className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-g2 border px-1 py-1.5 text-center"
     >
-      <span aria-hidden className="text-base leading-none sm:text-lg">
-        {player.avatar}
-      </span>
+      {/* Coloured here rather than inherited: the chip dims when inactive and
+          the mark has to keep carrying the seat's identity. */}
+      <SeatMark seat={player.seat} className="size-4 sm:size-[18px]" style={{ color }} />
 
       {!compact && (
         <span className="w-full truncate text-[10px] font-semibold text-ink-2 sm:text-xs">

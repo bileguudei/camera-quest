@@ -1,6 +1,6 @@
 "use client";
 
-import { Radio } from "lucide-react";
+import { Camera, Radio } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mn } from "@/content/mn";
 import { PREVIEW_STALE_MS } from "@/features/game/application/useTurnPreview";
@@ -136,8 +136,8 @@ export function SpectatorStage({
       {showing === "waiting" && (
         <div className="absolute inset-0 grid place-items-center px-6 text-center">
           <div className="flex flex-col items-center gap-3">
-            <span className="grid size-14 animate-pulse place-items-center rounded-full bg-white/8 text-2xl">
-              📷
+            <span className="grid size-14 animate-pulse place-items-center rounded-full bg-white/8 text-ink-2">
+              <Camera className="size-7" strokeWidth={2} />
             </span>
             <p className="max-w-[24ch] text-sm text-ink-3">{mn.online.waitingForCamera}</p>
           </div>

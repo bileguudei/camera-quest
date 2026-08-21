@@ -5,8 +5,8 @@ import { capturePreviewDataUrl } from "@/features/camera/frameCapture";
 import type { TurnChannel } from "../infrastructure/gameRepository";
 import type { Detection } from "@/features/vision/visionTypes";
 
-/** ~12fps. Fast enough to read as live, slow enough to stay inside Realtime's budget. */
-export const PREVIEW_INTERVAL_MS = 80;
+/** 10fps offsets the larger fallback frame while still reading as live motion. */
+export const PREVIEW_INTERVAL_MS = 100;
 /** A spectator view goes back to "waiting" rather than freezing on a stale frame. */
 export const PREVIEW_STALE_MS = 2_000;
 

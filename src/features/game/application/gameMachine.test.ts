@@ -8,7 +8,7 @@ const player = {
   seat: 1,
   name: "Номин",
   color: "violet" as const,
-  avatar: "🦊",
+  avatar: "aperture",
   score: 0,
   totalXp: 0,
   level: 1,
