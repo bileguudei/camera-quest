@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  FRAME_BATCH_SIZE,
   FRAME_INTERVAL_MS,
+  PREVIEW_MAX_DATA_URL_LENGTH,
+  PREVIEW_QUALITY,
+  PREVIEW_SIZE,
   VIDEO_READY_TIMEOUT_MS,
   waitForVideoFrame,
 } from "./frameCapture";
@@ -49,7 +53,15 @@ describe("waitForVideoFrame", () => {
 });
 
 describe("capture cadence", () => {
-  it("collects the five-frame consensus window in 400ms", () => {
-    expect(FRAME_INTERVAL_MS).toBe(100);
+  it("collects the five-frame consensus window fast enough to feel live", () => {
+    // Time to a verdict is capture plus one GPU batch, so the window is kept
+    // under a third of a second without asking for extra inference.
+    expect(FRAME_INTERVAL_MS * (FRAME_BATCH_SIZE - 1)).toBeLessThanOrEqual(300);
+  });
+
+  it("keeps the multiplayer fallback readable without exceeding its wire budget", () => {
+    expect(PREVIEW_SIZE).toBeGreaterThanOrEqual(288);
+    expect(PREVIEW_QUALITY).toBeGreaterThanOrEqual(0.5);
+    expect(PREVIEW_MAX_DATA_URL_LENGTH).toBeLessThanOrEqual(80_000);
   });
 });

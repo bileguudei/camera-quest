@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(51);
+select extensions.plan(53);
 
 select extensions.is(
   (select count(*)::integer from public.quests where key in (
@@ -48,22 +48,41 @@ select extensions.ok(
    ) from public.quests where kind = 'object'),
   'object quests carry no frame-coverage gate'
 );
--- A wall behind the player is desaturated; a real coloured object is not, and
--- the floor is what keeps the background from passing a colour turn.
+-- Two stable frames are enough to score, while one-frame detector noise still
+-- cannot award points. The UI only marks a box as confirmed after this gate.
 select extensions.ok(
   (select bool_and(
-     (validator_config->>'saturation')::numeric >= 0.4
-     and (validator_config->>'consensus')::integer >= 4
+     (validator_config->>'confidence')::numeric
+       - (validator_config->>'borderlineMin')::numeric <= 0.1
+     and (validator_config->>'consensus')::integer = 2
+   ) from public.quests where kind = 'object'),
+  'object scoring uses the playtested threshold and two-frame consensus'
+);
+-- Nobody finds fruit or cutlery in a classroom.
+select extensions.is(
+  (select count(*)::integer from public.quests
+   where active and 'school' = any (environments)
+     and key in ('obj-apple', 'obj-banana', 'obj-orange', 'obj-carrot',
+                 'obj-spoon', 'obj-fork', 'obj-bowl', 'obj-suitcase')),
+  0,
+  'school asks only for things that are in a classroom'
+);
+-- A coherent saturated region plus calibration still rejects background
+-- colour, without forcing the player to push the object against the lens.
+select extensions.ok(
+  (select bool_and(
+     (validator_config->>'saturation')::numeric >= 0.3
+     and (validator_config->>'consensus')::integer = 3
    ) from public.quests where kind = 'color'),
-  'colour needs a saturated region held across four frames'
+  'colour keeps a saturation floor and three-frame stability gate'
 );
 select extensions.ok(
   (select bool_and(
-    (validator_config->>'consensus')::integer = 4
-    and (validator_config->>'minArea')::numeric = 0.06
-    and (validator_config->>'minRegionArea')::numeric = 0.04
+    (validator_config->>'consensus')::integer = 3
+    and (validator_config->>'minArea')::numeric = 0.025
+    and (validator_config->>'minRegionArea')::numeric = 0.015
   ) from public.quests where kind = 'color'),
-  'color quests accept a small coherent object region'
+  'colour accepts a mid-distance coherent object region'
 );
 
 insert into auth.users (id, aud, role, email)

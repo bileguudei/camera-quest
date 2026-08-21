@@ -3,7 +3,10 @@ import { fullFrameRect, roiToVideo } from "./roi";
 
 export const FRAME_SIZE = 512;
 export const JPEG_QUALITY = 0.68;
-export const FRAME_INTERVAL_MS = 100;
+// 70ms rather than 100: the five frames of a batch are collected in 280ms
+// instead of 400, which is time taken off every scan without asking the GPU
+// for a single extra inference.
+export const FRAME_INTERVAL_MS = 70;
 export const FRAME_BATCH_SIZE = 5;
 export const VIDEO_READY_TIMEOUT_MS = 5_000;
 
@@ -96,15 +99,16 @@ async function encodeCameraFrame(
   return blob;
 }
 
-export const PREVIEW_SIZE = 192;
-export const PREVIEW_QUALITY = 0.4;
-/** A spectator frame rides Realtime, so it stays far below the message limit. */
-export const PREVIEW_MAX_BYTES = 60_000;
+export const PREVIEW_SIZE = 288;
+export const PREVIEW_QUALITY = 0.52;
+export const PREVIEW_FALLBACK_QUALITY = 0.38;
+/** Includes the base64 prefix and stays below the receiving schema's 80k cap. */
+export const PREVIEW_MAX_DATA_URL_LENGTH = 76_000;
 
 let previewSurface: CaptureSurface | null = null;
 
-const previewBlob = (canvas: HTMLCanvasElement) =>
-  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", PREVIEW_QUALITY));
+const previewBlob = (canvas: HTMLCanvasElement, quality: number) =>
+  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
 
 const asDataUrl = (blob: Blob) =>
   new Promise<string | null>((resolve) => {
@@ -146,12 +150,18 @@ export async function capturePreviewDataUrl(video: HTMLVideoElement): Promise<st
     PREVIEW_SIZE,
   );
 
-  const blob = await previewBlob(previewSurface.canvas);
+  const blob = await previewBlob(previewSurface.canvas, PREVIEW_QUALITY);
   if (!blob) return null;
   const dataUrl = await asDataUrl(blob);
-  // A frame that will not fit is dropped rather than split: the next one is
-  // milliseconds away and a live view tolerates a gap better than a stall.
-  return dataUrl && dataUrl.length <= PREVIEW_MAX_BYTES ? dataUrl : null;
+  if (dataUrl && dataUrl.length <= PREVIEW_MAX_DATA_URL_LENGTH) return dataUrl;
+
+  // Detailed scenes can exceed the Realtime payload at the normal quality.
+  // Re-encode that frame once instead of dropping it and making the fallback
+  // view freeze; scoring capture remains on its completely separate surface.
+  const fallback = await previewBlob(previewSurface.canvas, PREVIEW_FALLBACK_QUALITY);
+  if (!fallback) return null;
+  const fallbackUrl = await asDataUrl(fallback);
+  return fallbackUrl && fallbackUrl.length <= PREVIEW_MAX_DATA_URL_LENGTH ? fallbackUrl : null;
 }
 
 /** Captures the complete camera area the player can currently see. */
