@@ -14,9 +14,16 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
 ];
 
-/** 240p is plenty for watching someone wave a cup at their camera. */
-const VIDEO_MAX_BITRATE = 250_000;
-const VIDEO_SCALE_DOWN = 3;
+/**
+ * The source camera is requested at 720p. Scaling by two produces a readable
+ * 640x360 spectator stream, while the bitrate/framerate caps keep the five-peer
+ * mesh below a typical mobile uplink budget.
+ */
+export const TURN_VIDEO_ENCODING = {
+  maxBitrate: 500_000,
+  maxFramerate: 20,
+  scaleResolutionDownBy: 2,
+} satisfies RTCRtpEncodingParameters;
 /** A watcher re-announces itself so a publisher that started later still sees it. */
 const WATCH_PING_MS = 2_000;
 /** Nothing negotiated by then: keep showing frames rather than a black box. */
@@ -99,11 +106,13 @@ export function useTurnVideoPublisher({
       peers.current.set(watcher, peer);
 
       for (const track of media.getVideoTracks()) {
+        // Camera Quest contains small objects and recognition boxes, so browsers
+        // should preserve spatial detail before frame rate when bandwidth dips.
+        track.contentHint = "detail";
         const sender = peer.addTrack(track, media);
         const parameters = sender.getParameters();
-        parameters.encodings = [
-          { maxBitrate: VIDEO_MAX_BITRATE, scaleResolutionDownBy: VIDEO_SCALE_DOWN },
-        ];
+        parameters.encodings = [{ ...TURN_VIDEO_ENCODING }];
+        parameters.degradationPreference = "maintain-resolution";
         // A mesh of five watchers must not saturate the player's uplink and
         // starve the frames that actually decide the score.
         await sender.setParameters(parameters).catch(() => undefined);

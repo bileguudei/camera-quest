@@ -19,6 +19,13 @@ HSV_RANGES: Final[dict[str, HueRange]] = {
     "blue": ((85, 145),),
 }
 
+DEFAULT_SATURATION: Final[dict[str, float]] = {
+    "red": 0.36,
+    "yellow": 0.30,
+    "green": 0.30,
+    "blue": 0.30,
+}
+
 
 def _color_area_ratios(
     frame: Frame,
@@ -57,10 +64,11 @@ def _color_area_ratios(
 def color_ratio(
     frame: Frame,
     color: str,
-    saturation: float = 0.28,
+    saturation: float | None = None,
     value: float = 0.18,
 ) -> float:
-    return _color_area_ratios(frame, color, saturation, value)[0]
+    floor = DEFAULT_SATURATION[color] if saturation is None else saturation
+    return _color_area_ratios(frame, color, floor, value)[0]
 
 
 class ColorValidator(Validator):
@@ -77,7 +85,11 @@ class ColorValidator(Validator):
             raise ValueError("color quest is missing target_color")
         minimum = float(quest.validator_config.get("minArea", 0.025))
         minimum_region = float(quest.validator_config.get("minRegionArea", 0.015))
-        saturation = float(quest.validator_config.get("saturation", 0.28))
+        saturation = float(
+            quest.validator_config.get(
+                "saturation", DEFAULT_SATURATION[quest.target_color]
+            )
+        )
         value = float(quest.validator_config.get("value", 0.18))
         consensus = int(quest.validator_config.get("consensus", 3))
         baseline = calibration.color_ratios.get(quest.target_color, 0.0)

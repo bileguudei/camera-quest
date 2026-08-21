@@ -16,15 +16,16 @@ from app.validators.smile import SmileValidator
 
 
 class FakeDetector:
-    def __init__(self, confidences: list[float]) -> None:
+    def __init__(self, confidences: list[float], label: str = "bottle") -> None:
         self.confidences = confidences
+        self.label = label
 
     async def detect_batch(self, frames: list[np.ndarray]) -> list[list[Detection]]:
         del frames
         return [
             [
                 Detection(
-                    label="bottle",
+                    label=self.label,
                     confidence=confidence,
                     box=Box(x=0.2, y=0.2, w=0.4, h=0.4),
                     target=False,
@@ -71,6 +72,46 @@ async def test_object_requires_three_of_five_frames() -> None:
     result = await validator.validate(frames, quest, CalibrationClaims(sub="x", exp=9_999_999_999))
     assert result.passed
     assert sum(detection.target for detection in result.detections) == 1
+
+
+@pytest.mark.asyncio
+async def test_backpack_scores_after_two_stable_frames_at_playtest_threshold() -> None:
+    frames = [np.zeros((512, 512, 3), dtype=np.uint8) for _ in range(5)]
+    quest = QuestConfig(
+        id="q",
+        key="obj-backpack",
+        kind="object",
+        target_class="backpack",
+        validator_config={"confidence": 0.55, "borderlineMin": 0.45, "consensus": 2},
+    )
+
+    result = await ObjectValidator(
+        FakeDetector([0.58, 0.57, 0.30, 0.20, 0.10], label="backpack")
+    ).validate(frames, quest, CalibrationClaims(sub="x", exp=9_999_999_999))
+
+    assert result.passed
+    assert result.progress == 1.0
+    assert sum(detection.target for detection in result.detections) == 1
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_object_never_draws_a_success_box() -> None:
+    frames = [np.zeros((512, 512, 3), dtype=np.uint8) for _ in range(5)]
+    quest = QuestConfig(
+        id="q",
+        key="obj-backpack",
+        kind="object",
+        target_class="backpack",
+        validator_config={"confidence": 0.55, "borderlineMin": 0.45, "consensus": 2},
+    )
+
+    result = await ObjectValidator(
+        FakeDetector([0.72, 0.20, 0.10, 0.10, 0.10], label="backpack")
+    ).validate(frames, quest, CalibrationClaims(sub="x", exp=9_999_999_999))
+
+    assert not result.passed
+    assert result.progress == 0.5
+    assert not any(detection.target for detection in result.detections)
 
 
 @pytest.mark.asyncio
@@ -144,7 +185,41 @@ async def test_color_accepts_a_phone_sized_muted_blue_region() -> None:
     result = await ColorValidator().validate(
         [cast(Frame, frame)] * 5,
         quest,
-        CalibrationClaims(sub="x", exp=9_999_999_999),
+        CalibrationClaims(
+            sub="x", exp=9_999_999_999, color_ratios={"blue": 0.005}
+        ),
+    )
+
+    assert result.passed
+
+
+@pytest.mark.asyncio
+async def test_color_accepts_a_mid_distance_object_with_production_thresholds() -> None:
+    frame_hsv = np.zeros((512, 512, 3), dtype=np.uint8)
+    # Roughly 3% of the frame: visible at arm's length, without pushing the
+    # object against the camera lens.
+    frame_hsv[210:290, 206:306] = (110, 120, 180)
+    frame = cv2.cvtColor(frame_hsv, cv2.COLOR_HSV2BGR)
+    quest = QuestConfig(
+        id="q",
+        key="color-blue",
+        kind="color",
+        target_color="blue",
+        validator_config={
+            "minArea": 0.025,
+            "minRegionArea": 0.015,
+            "saturation": 0.30,
+            "value": 0.18,
+            "consensus": 3,
+        },
+    )
+
+    result = await ColorValidator().validate(
+        [cast(Frame, frame)] * 5,
+        quest,
+        CalibrationClaims(
+            sub="x", exp=9_999_999_999, color_ratios={"blue": 0.005}
+        ),
     )
 
     assert result.passed
@@ -201,4 +276,3 @@ def test_registry_rejects_unknown_kind() -> None:
     registry = ValidatorRegistry([ColorValidator()])
     with pytest.raises(ValueError, match="unsupported"):
         registry.for_kind("semantic")
-

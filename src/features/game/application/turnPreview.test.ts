@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { turnPreviewFrameSchema, turnSignalSchema } from "../infrastructure/gameApiSchemas";
+import { TURN_VIDEO_ENCODING } from "./useTurnVideo";
 
 const frame = (overrides: Record<string, unknown> = {}) => ({
   seat: 2,
@@ -89,5 +90,13 @@ describe("webrtc signalling payload", () => {
       .toBe(true);
     expect(turnSignalSchema.safeParse(signal({ kind: "transport", transport: "carrier-pigeon" }))
       .success).toBe(false);
+  });
+});
+
+describe("multiplayer live video quality", () => {
+  it("sends a detail-preserving 360p-class stream at a bounded bitrate", () => {
+    expect(TURN_VIDEO_ENCODING.scaleResolutionDownBy).toBeLessThanOrEqual(2);
+    expect(TURN_VIDEO_ENCODING.maxBitrate).toBeGreaterThanOrEqual(450_000);
+    expect(TURN_VIDEO_ENCODING.maxFramerate).toBeLessThanOrEqual(24);
   });
 });

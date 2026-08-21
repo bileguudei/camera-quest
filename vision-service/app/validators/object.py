@@ -40,9 +40,9 @@ class ObjectValidator(Validator):
     ) -> ValidationResult:
         if quest.target_class is None:
             raise ValueError("object quest is missing target_class")
-        threshold = float(quest.validator_config.get("confidence", 0.65))
+        threshold = float(quest.validator_config.get("confidence", 0.55))
         borderline = float(quest.validator_config.get("borderlineMin", 0.45))
-        consensus = int(quest.validator_config.get("consensus", 3))
+        consensus = int(quest.validator_config.get("consensus", 2))
         batches = await self.detector.detect_batch(frames)
         target_per_frame = [
             max(
@@ -53,19 +53,29 @@ class ObjectValidator(Validator):
         ]
         matches = sum(score >= threshold for score in target_per_frame)
         best_frame_index = max(range(len(target_per_frame)), key=target_per_frame.__getitem__)
-        visible_detections = [
-            item.model_copy(update={"target": item.label == quest.target_class})
-            for item in batches[best_frame_index]
-        ]
+        best_detections = batches[best_frame_index]
         best = max(target_per_frame, default=0.0)
         fallback_reason: str | None = None
+
+        def visible_detections(confirmed: bool) -> list[Detection]:
+            # Green is a success colour in the game. A single-frame candidate
+            # may drive progress, but it must stay neutral until the same gate
+            # that awards the score has confirmed it.
+            return [
+                item.model_copy(
+                    update={
+                        "target": confirmed and item.label == quest.target_class
+                    }
+                )
+                for item in best_detections
+            ]
 
         if matches >= consensus:
             return ValidationResult(
                 True,
                 1.0,
                 best,
-                visible_detections,
+                visible_detections(True),
                 quest.target_class,
                 "rfdetr_consensus",
             )
@@ -87,7 +97,7 @@ class ObjectValidator(Validator):
                         True,
                         1.0,
                         confidence,
-                        visible_detections,
+                        visible_detections(True),
                         quest.target_class,
                         "gemini_borderline",
                     )
@@ -99,7 +109,7 @@ class ObjectValidator(Validator):
             False,
             min(0.99, matches / consensus),
             best,
-            visible_detections,
+            visible_detections(False),
             quest.target_class if best >= borderline else None,
             fallback_reason or "object_consensus",
         )
