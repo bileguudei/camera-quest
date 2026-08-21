@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence } from "motion/react";
+import { useEffect } from "react";
 import { DevPanel } from "camera-quest-dev-panel";
 import { Calibrating } from "@/features/game/ui/screens/Calibrating";
 import { CameraCheck } from "@/features/game/ui/screens/CameraCheck";
@@ -21,6 +22,7 @@ import type { Phase } from "@/features/game/domain/types";
 import { CameraProvider } from "@/features/camera/CameraProvider";
 import { GameProvider } from "@/features/game/application/GameProvider";
 import { useLobbySync } from "@/features/game/application/useLobbySync";
+import { consumeInviteCode } from "@/features/game/application/inviteLink";
 
 const SCREENS: Record<Phase, () => React.JSX.Element | null> = {
   landing: Landing,
@@ -45,8 +47,15 @@ const SCREENS: Record<Phase, () => React.JSX.Element | null> = {
  */
 function GameRuntime() {
   const phase = useGame((s) => s.phase);
+  const openOnline = useGame((s) => s.openOnline);
   useLobbySync();
   const Current = SCREENS[phase];
+
+  // An invite link lands here, not on a route of its own: the whole game is one
+  // page, so the code is read off the URL and the online screen is opened.
+  useEffect(() => {
+    if (consumeInviteCode()) openOnline();
+  }, [openOnline]);
 
   return (
     <CameraProvider>
