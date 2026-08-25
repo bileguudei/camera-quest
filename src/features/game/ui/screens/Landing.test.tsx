@@ -29,9 +29,26 @@ describe("Landing", () => {
     render(<Landing />);
 
     fireEvent.click(screen.getByRole("button", { name: /Тоглоом эхлүүлэх/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Найзтайгаа онлайн/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Онлайн тоглох/ }));
 
     expect(mocks.openSetup).toHaveBeenCalledTimes(1);
     expect(mocks.openOnline).toHaveBeenCalledTimes(1);
+  });
+
+  it("describes the invite-code multiplayer that is actually available", () => {
+    render(<Landing />);
+
+    expect(screen.getByText(/Найзуудаа кодоор урьж/)).toBeInTheDocument();
+    expect(screen.queryByText(/Санамсаргүй тоглогчидтой/)).not.toBeInTheDocument();
+  });
+
+  it("places Mimic Rush beside the main game doors instead of in the header", () => {
+    render(<Landing />);
+
+    expect(screen.getByRole("link", { name: /Mimic Rush/ })).toHaveAttribute(
+      "href",
+      "/pose-party",
+    );
+    expect(screen.queryByText(/Face Arena/)).not.toBeInTheDocument();
   });
 });

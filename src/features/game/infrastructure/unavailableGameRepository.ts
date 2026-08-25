@@ -15,6 +15,7 @@ export class UnavailableGameRepository implements GameRepository {
   async prepareTurn() { return unavailable(); }
   async activateTurn() { return unavailable(); }
   async expireTurn() { return unavailable(); }
+  async recoverDisconnectedTurn() { return unavailable(); }
   async completeGame() { return unavailable(); }
   async abandonGame() { return unavailable(); }
   async submitTurnFeedback() { return unavailable(); }
@@ -23,6 +24,12 @@ export class UnavailableGameRepository implements GameRepository {
   async readGameState() { return unavailable(); }
   async setReady() { return unavailable(); }
   async startOnlineGame() { return unavailable(); }
+  async activateMimicTurn() { return unavailable(); }
+  async passMimicTurn() { return unavailable(); }
+  async expireMimicTurn() { return unavailable(); }
+  async heartbeatGame() { return unavailable(); }
+  async requestRematch() { return unavailable(); }
+  async issueVisionTicket() { return unavailable(); }
   async leaveGame() { return unavailable(); }
   async advanceTurn() { return unavailable(); }
   subscribeToGame() { return unavailable(); }

@@ -14,6 +14,7 @@ import { useGame } from "@/features/game/application/useGame";
 import { PLAYER_COLOR_HEX } from "@/features/game/domain/config";
 import { formatSeconds } from "@/features/game/domain/scoring";
 import { handoffErrorMessage } from "@/features/game/domain/errorMessages";
+import { useExpiredTurnRecovery } from "@/features/game/application/useExpiredTurnRecovery";
 
 /** The shared deadline ticks for watchers too, so the tension is the same. */
 function useDeadlineLabel(deadlineAt: string | null): string | null {
@@ -40,15 +41,23 @@ export function PlayerHandoff() {
   const errorCode = useGame((state) => state.errorCode);
   const isMyTurn = useGame((state) => state.isMyTurn);
   const lobby = useGame((state) => state.lobby);
+  const recoverExpiredTurn = useGame((state) => state.recoverExpiredTurn);
 
   const turnInFlight =
     lobby?.lastTurn?.status === "active" && lobby.lastTurn.seat === lobby.currentSeat;
   const remaining = useDeadlineLabel(turnInFlight ? (lobby?.lastTurn?.deadlineAt ?? null) : null);
+  const spectating = !isMyTurn;
+
+  useExpiredTurnRecovery({
+    enabled: spectating && turnInFlight,
+    turnId: turnInFlight ? (lobby?.lastTurn?.turnId ?? null) : null,
+    deadlineAt: turnInFlight ? (lobby?.lastTurn?.deadlineAt ?? null) : null,
+    recover: recoverExpiredTurn,
+  });
 
   if (!player) return null;
   // At an online table only the seat the server points at opens a camera; the
   // other phones watch this screen until the pointer moves.
-  const spectating = !isMyTurn;
   const activePrompt = turnInFlight ? (lobby?.lastTurn?.prompt ?? null) : null;
   const color = PLAYER_COLOR_HEX[player.color];
 

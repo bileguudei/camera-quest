@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "motion/react";
-import { Play, Camera, Users, Zap, Sparkles } from "lucide-react";
+import { Play, Camera, Users, Zap, Sparkles, ScanFace } from "lucide-react";
 import { GameButton } from "@/features/game/ui/components/GameButton";
 import { Screen, ScreenFooter } from "@/features/game/ui/components/Screen";
 import { mn } from "@/content/mn";
@@ -39,7 +40,7 @@ const FEATURE_CARDS = [
     icon: Zap,
     color: "primary" as const,
     title: "Шууд тоглоно",
-    desc: "Санамсаргүй тоглогчидтой шууд тоглоорой.",
+    desc: "Найзуудаа кодоор урьж, шууд өрсөлдөөрэй.",
   },
 ];
 
@@ -54,7 +55,7 @@ export function Landing() {
   return (
     <Screen className="justify-between">
       {/* Top nav */}
-      <div className="flex shrink-0 items-center justify-between px-1 pt-1">
+      <div className="flex shrink-0 items-center px-1 pt-1">
         <div className="flex items-center gap-1.5">
           <span className="grid size-7 place-items-center rounded-lg bg-primary/15 text-primary">
             <Camera className="size-4" strokeWidth={2} />
@@ -230,8 +231,9 @@ export function Landing() {
           animate="show"
           className="flex flex-col gap-2.5"
         >
-          {/* w-full: without it the wrapper shrank to the label and the two
-              buttons ended up different widths. */}
+          {/* The primary Camera Quest door remains full-width. The two other
+              real game doors share the next row, keeping Mimic Rush in the
+              main action area instead of hiding it in the header. */}
           <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -245,16 +247,31 @@ export function Landing() {
             </GameButton>
           </motion.div>
 
-          {/* The only way into an online table; a landing redesign that drops
-              this makes the whole multiplayer flow unreachable. */}
-          <GameButton
-            variant="ghost"
-            size="md"
-            onClick={openOnline}
-            icon={<Users className="size-5" strokeWidth={2.6} />}
-          >
-            {mn.landing.onlineCta}
-          </GameButton>
+          <div className="grid grid-cols-2 gap-2.5">
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Link
+                href="/pose-party"
+                className="btn-3d relative inline-flex min-h-14 w-full select-none items-center justify-center gap-2 rounded-g3 border border-line/80 bg-surface-2 px-3 font-display text-base font-extrabold tracking-tight text-ink [--btn-edge:var(--surface-deep)] hover:bg-surface-3"
+              >
+                <ScanFace className="size-5 shrink-0 text-accent-2" strokeWidth={2.4} />
+                <span className="text-clip-1 leading-tight">Mimic Rush</span>
+              </Link>
+            </motion.div>
+
+            {/* The only way into an online table; a landing redesign that drops
+                this makes the whole multiplayer flow unreachable. */}
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <GameButton
+                variant="ghost"
+                size="md"
+                onClick={openOnline}
+                icon={<Users className="size-5" strokeWidth={2.6} />}
+                className="px-3 text-base"
+              >
+                Онлайн тоглох
+              </GameButton>
+            </motion.div>
+          </div>
         </motion.div>
       </ScreenFooter>
     </Screen>

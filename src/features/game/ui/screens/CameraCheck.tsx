@@ -2,7 +2,7 @@
 
 import { CameraOff, Cloud, Play, RefreshCw, SwitchCamera } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CameraFrame } from "@/features/game/ui/components/CameraFrame";
 import { GameButton, IconButton } from "@/features/game/ui/components/GameButton";
 import { Screen, ScreenFooter } from "@/features/game/ui/components/Screen";
@@ -13,6 +13,7 @@ import { useCameraContext } from "@/features/camera/CameraProvider";
 import { getGameRepository } from "@/features/game/infrastructure/createGameRepository";
 import { warmVisionService } from "@/features/vision/visionClient";
 import { publicEnv } from "@/shared/env/publicEnv";
+import { useCameraPreflight } from "@/features/camera/cameraPreflight";
 
 const fastDevelopmentFlow =
   process.env.NODE_ENV === "development" && publicEnv.devControlsEnabled;
@@ -36,6 +37,7 @@ export function CameraCheck() {
   const gameError = useGame((s) => s.errorCode);
 
   const { stream, status, retry } = useCameraContext();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const demo = cameraMode === "demo";
   const cameraOk = status === "ready" || demo;
@@ -45,6 +47,7 @@ export function CameraCheck() {
   const [readyDone, setReadyDone] = useState(false);
   const [warmupAttempt, setWarmupAttempt] = useState(0);
   const [warmupFailed, setWarmupFailed] = useState(false);
+  const preflight = useCameraPreflight(videoRef, status, demo);
 
   // The checklist only ever counts while the camera is live.
   const modelOk = cameraOk && modelDone;
@@ -101,7 +104,9 @@ export function CameraCheck() {
     };
   }, [cameraOk, modelDone]);
 
-  const allReady = cameraOk && modelOk && readyOk;
+  const connectivityOk = backendMode === "local" || preflight.online;
+  const allReady =
+    cameraOk && modelOk && readyOk && connectivityOk && preflight.lighting === "good";
   const backendUnavailable = backendMode === "unavailable";
   const showWarmupFailure = warmupFailed && backendMode === "supabase" && !demo;
 
@@ -174,6 +179,7 @@ export function CameraCheck() {
                 stream={stream}
                 facing={facing}
                 demo={demo}
+                videoRef={videoRef}
                 className="size-full rounded-g4 border border-line/70"
               >
                 {demo && (
@@ -204,6 +210,20 @@ export function CameraCheck() {
                       state={stateOf(cameraOk, true)}
                       pendingLabel={mn.camera.steps.camera.pending}
                       doneLabel={mn.camera.steps.camera.done}
+                    />
+                    <StatusBadge
+                      state={stateOf(connectivityOk, true)}
+                      pendingLabel={mn.camera.steps.network.pending}
+                      doneLabel={mn.camera.steps.network.done}
+                    />
+                    <StatusBadge
+                      state={stateOf(preflight.lighting === "good", cameraOk)}
+                      pendingLabel={
+                        preflight.lighting === "dark"
+                          ? mn.camera.steps.light.dark
+                          : mn.camera.steps.light.pending
+                      }
+                      doneLabel={mn.camera.steps.light.done}
                     />
                     <StatusBadge
                       state={stateOf(modelOk, cameraOk)}

@@ -94,6 +94,9 @@ sequenceDiagram
   D-->>R: games/game_players change
   R-->>H: refetch game_state
   H->>D: start_online_game (lobby closes)
+  D-->>R: authoritative start change
+  R-->>H: every phone enters round intro; no second Start action
+  R-->>G: every phone enters round intro; no second Start action
   loop each turn
     Note over H,G: only the seat matching games.current_seat opens a camera
     D-->>R: turns change
@@ -179,6 +182,8 @@ Direct imports are intentional. Do not add barrel files or duplicate Supabase se
 - Frame batches are five 512×512 JPEGs, each capped at 300 KB and the batch capped at 1.5 MiB.
 - Calibration tokens are HMAC-signed, owner-bound, and expire after 10 minutes.
 - Sequence numbers have container-fast replay/rate checks and a database unique key as the global guard.
+  Only an authorized active turn enters that replay map; inactive keys expire after 10 minutes and
+  the map has a hard 10,000-key bound. Warmup, calibration, and validation also carry per-subject quotas.
 - If Sentry is enabled, its scrubbers delete request bodies/cookies and filter image/frame-like
   fields on both Next.js and Python. Empty DSNs keep observability disabled without changing game
   behavior.

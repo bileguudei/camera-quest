@@ -26,16 +26,19 @@ const SIZES: Record<Size, string> = {
   lg: "min-h-16 px-7 text-xl sm:text-2xl rounded-g3",
 };
 
+// All three sit on the same pressable edge. A flat outlined secondary next to
+// a raised primary read as two different kits rather than one choice.
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-primary text-primary-ink btn-3d",
   danger: "bg-danger text-[#2b0710] btn-3d",
   ghost:
-    "bg-surface-2/70 text-ink border border-line/80 hover:bg-surface-3/80 active:translate-y-[2px] transition",
+    "bg-surface-2 text-ink border border-line/80 btn-3d hover:bg-surface-3",
 };
 
-const EDGES: Partial<Record<Variant, string>> = {
+const EDGES: Record<Variant, string> = {
   primary: "var(--primary-deep)",
   danger: "var(--danger-deep)",
+  ghost: "var(--surface-deep)",
 };
 
 export function GameButton({
@@ -49,12 +52,7 @@ export function GameButton({
   children,
   ...rest
 }: GameButtonProps) {
-  const custom: CSSProperties = {
-    ...(EDGES[variant]
-      ? ({ "--btn-edge": EDGES[variant] } as CSSProperties)
-      : null),
-    ...style,
-  };
+  const custom = { "--btn-edge": EDGES[variant], ...style } as CSSProperties;
 
   return (
     <button

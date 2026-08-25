@@ -8,6 +8,7 @@ import type {
   CameraMode,
   Challenge,
   GameEnvironment,
+  GameKind,
   LobbyState,
   Phase,
   Player,
@@ -27,6 +28,7 @@ export interface CalibrationPayload {
 
 export interface GameView {
   phase: Phase;
+  gameId: string | null;
   players: Player[];
   playerCount: number;
   roundIndex: number;
@@ -50,10 +52,13 @@ export interface GameView {
   goTo: (phase: Phase) => void;
   openSetup: () => void;
   openOnline: () => void;
-  hostOnlineGame: (name: string) => Promise<void>;
+  hostOnlineGame: (name: string, gameKind: GameKind) => Promise<void>;
   joinOnlineGame: (joinCode: string, name: string) => Promise<void>;
   setLobbyReady: (ready: boolean) => Promise<void>;
   startOnlineGame: () => Promise<void>;
+  activateMimicTurn: (turnId: string) => Promise<void>;
+  passMimicTurn: (turnId: string) => Promise<void>;
+  expireMimicTurn: (turnId: string) => Promise<void>;
   setPlayerCount: (count: number) => void;
   setPlayerName: (id: string, name: string) => void;
   confirmPlayers: () => void;
@@ -71,11 +76,12 @@ export interface GameView {
   acceptOutcome: (outcome: TurnOutcome) => void;
   resolveTurn: (success: boolean, elapsedMs: number) => Promise<void>;
   expireTurn: () => Promise<number | null>;
+  recoverExpiredTurn: (turnId: string) => Promise<number | null>;
   reportSystemError: () => void;
   advanceTurn: () => void;
   nextRound: () => void;
-  playAgain: () => void;
-  newGame: () => void;
+  playAgain: () => Promise<void>;
+  newGame: () => Promise<void>;
   quitGame: () => Promise<void>;
   submitTurnFeedback: (turnId: string, reason: TurnFeedbackReason) => Promise<void>;
   currentPlayer: () => Player | null;
@@ -104,6 +110,7 @@ export function useGame<T>(selector: (state: GameView) => T): T {
 
     return {
       phase,
+      gameId: context.gameId,
       players: context.players,
       playerCount: context.playerCount,
       roundIndex: context.roundIndex,
@@ -130,10 +137,13 @@ export function useGame<T>(selector: (state: GameView) => T): T {
       },
       openSetup: () => actor.send({ type: "OPEN_SETUP" }),
       openOnline: () => actor.send({ type: "OPEN_ONLINE" }),
-      hostOnlineGame: async (name) => {
+      hostOnlineGame: async (name, gameKind) => {
         actor.send({ type: "START_GAME_PENDING" });
         try {
-          actor.send({ type: "LOBBY_UPDATED", lobby: await repository.createOnlineGame(name, context.environment) });
+          actor.send({
+            type: "LOBBY_UPDATED",
+            lobby: await repository.createOnlineGame(name, context.environment, gameKind),
+          });
         } catch (error) {
           actor.send({ type: "GAME_FAILED", code: toAppError(error).code });
         }
@@ -167,6 +177,37 @@ export function useGame<T>(selector: (state: GameView) => T): T {
           });
         } catch (error) {
           actor.send({ type: "GAME_FAILED", code: toAppError(error).code });
+        }
+      },
+      activateMimicTurn: async (turnId) => {
+        try {
+          actor.send({
+            type: "LOBBY_UPDATED",
+            lobby: await repository.activateMimicTurn(turnId),
+          });
+        } catch (error) {
+          actor.send({ type: "GAME_FAILED", code: toAppError(error).code });
+        }
+      },
+      passMimicTurn: async (turnId) => {
+        try {
+          actor.send({
+            type: "LOBBY_UPDATED",
+            lobby: await repository.passMimicTurn(turnId),
+          });
+        } catch (error) {
+          actor.send({ type: "GAME_FAILED", code: toAppError(error).code });
+        }
+      },
+      expireMimicTurn: async (turnId) => {
+        try {
+          actor.send({
+            type: "LOBBY_UPDATED",
+            lobby: await repository.expireMimicTurn(turnId),
+          });
+        } catch {
+          // Every phone runs the deadline watchdog. A concurrent winner or a
+          // short reconnect is covered by the next realtime snapshot/poll.
         }
       },
       setPlayerCount: (count) => actor.send({ type: "SET_PLAYER_COUNT", count }),
@@ -268,6 +309,34 @@ export function useGame<T>(selector: (state: GameView) => T): T {
         }
         return result.remainingMs ?? null;
       },
+      recoverExpiredTurn: async (turnId) => {
+        const observedLobby = context.lobby;
+        if (!observedLobby || observedLobby.lastTurn?.turnId !== turnId) return null;
+
+        try {
+          const lobby = await repository.recoverDisconnectedTurn(turnId);
+          actor.send({ type: "LOBBY_UPDATED", lobby });
+          return lobby.lastTurn?.turnId === turnId && lobby.lastTurn.status === "active"
+            ? 2_000
+            : null;
+        } catch {
+          // Another watcher may have won the row lock or the grace window may
+          // not have elapsed on the server clock. The authoritative refresh
+          // below decides whether this phone should retry.
+        }
+
+        try {
+          const lobby = await repository.readGameState(observedLobby.gameId);
+          actor.send({ type: "LOBBY_UPDATED", lobby });
+          return lobby.lastTurn?.turnId === turnId && lobby.lastTurn.status === "active"
+            ? 2_000
+            : null;
+        } catch {
+          // Realtime/polling may still recover independently; retry slowly
+          // while this spectator remains on the same active turn.
+          return 2_000;
+        }
+      },
       reportSystemError: () => actor.send({ type: "VISION_SYSTEM_ERROR" }),
       advanceTurn: () => {
         actor.send({ type: "ADVANCE_TURN" });
@@ -296,16 +365,41 @@ export function useGame<T>(selector: (state: GameView) => T): T {
             actor.send({ type: "GAME_FAILED", code: toAppError(error).code }),
           );
       },
-      playAgain: () => {
+      playAgain: async () => {
+        if (context.lobby) {
+          actor.send({ type: "PLAY_AGAIN" });
+          try {
+            actor.send({
+              type: "LOBBY_UPDATED",
+              lobby: await repository.requestRematch(context.lobby.gameId),
+            });
+          } catch (error) {
+            actor.send({ type: "GAME_FAILED", code: toAppError(error).code });
+          }
+          return;
+        }
         actor.send({ type: "START_GAME_PENDING" });
-        void repository
-          .createGame({ players: resolveNames(context.players), environment: context.environment })
-          .then((session) => actor.send({ type: "START_GAME", session }))
-          .catch((error: unknown) =>
-            actor.send({ type: "GAME_FAILED", code: toAppError(error).code }),
-          );
+        try {
+          const session = await repository.createGame({
+            players: resolveNames(context.players),
+            environment: context.environment,
+          });
+          actor.send({ type: "START_GAME", session });
+        } catch (error) {
+          actor.send({ type: "GAME_FAILED", code: toAppError(error).code });
+        }
       },
-      newGame: () => actor.send({ type: "NEW_GAME" }),
+      newGame: async () => {
+        if (context.lobby) {
+          actor.send({ type: "START_GAME_PENDING" });
+          try {
+            await repository.leaveGame(context.lobby.gameId);
+          } catch {
+            // The context still has to be cleared when a phone is offline.
+          }
+        }
+        actor.send({ type: "NEW_GAME" });
+      },
       quitGame: async () => {
         if (context.lobby) {
           try {

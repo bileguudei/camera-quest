@@ -15,6 +15,9 @@
   --surface: #141a3a;
   --surface-2: #1d2450;
   --surface-3: #262e63;
+  /* The pressed edge under a secondary button, so it has the same weight
+     under the finger as the primary one rather than reading as an outline. */
+  --surface-deep: #0f1434;
   --line: #2f3775;
 
   /* Ink */
@@ -69,6 +72,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
+  --color-surface-deep: var(--surface-deep);
   --color-line: var(--line);
 
   --color-ink: var(--ink);
@@ -202,8 +206,16 @@ button {
   border-radius: 34px;
   border: 1px solid color-mix(in oklab, var(--line) 52%, transparent);
   background:
-    linear-gradient(180deg, color-mix(in oklab, var(--surface-2) 40%, transparent), transparent 38%),
-    radial-gradient(90% 70% at 50% -10%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 62%),
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--surface-2) 40%, transparent),
+      transparent 38%
+    ),
+    radial-gradient(
+      90% 70% at 50% -10%,
+      color-mix(in oklab, var(--accent) 16%, transparent),
+      transparent 62%
+    ),
     color-mix(in oklab, var(--surface) 52%, transparent);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.08),
@@ -300,7 +312,8 @@ button {
 @utility glow-ring {
   box-shadow:
     0 0 0 1px color-mix(in oklab, var(--glow, var(--accent)) 55%, transparent),
-    0 0 32px -6px color-mix(in oklab, var(--glow, var(--accent)) 65%, transparent);
+    0 0 32px -6px
+      color-mix(in oklab, var(--glow, var(--accent)) 65%, transparent);
 }
 
 /* ==========================================================================
@@ -386,6 +399,23 @@ button {
   }
 }
 
+@keyframes cq-time-pressure {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.92;
+  }
+}
+
+.cq-time-pressure {
+  animation: cq-time-pressure 0.72s ease-in-out infinite;
+  box-shadow:
+    inset 0 0 52px rgb(255 197 61 / 0.28),
+    0 0 36px rgb(255 197 61 / 0.34);
+}
+
 .anim-shake {
   animation: cq-shake 0.42s var(--ease-out) 1;
 }
@@ -414,7 +444,8 @@ button {
   .anim-float,
   .anim-shimmer,
   .anim-scan,
-  .anim-shake {
+  .anim-shake,
+  .cq-time-pressure {
     animation: none !important;
   }
 }

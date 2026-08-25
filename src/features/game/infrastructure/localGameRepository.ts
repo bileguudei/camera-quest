@@ -84,6 +84,8 @@ export class LocalGameRepository implements GameRepository {
     return { outcome: await this.resolveLocalTurn(turnId, false, 30_000) };
   }
 
+  async recoverDisconnectedTurn(): Promise<never> { return onlineUnavailable(); }
+
   async completeGame() {}
 
   async abandonGame() {}
@@ -116,6 +118,12 @@ export class LocalGameRepository implements GameRepository {
   async readGameState(): Promise<never> { return onlineUnavailable(); }
   async setReady(): Promise<never> { return onlineUnavailable(); }
   async startOnlineGame(): Promise<never> { return onlineUnavailable(); }
+  async activateMimicTurn(): Promise<never> { return onlineUnavailable(); }
+  async passMimicTurn(): Promise<never> { return onlineUnavailable(); }
+  async expireMimicTurn(): Promise<never> { return onlineUnavailable(); }
+  async heartbeatGame(): Promise<never> { return onlineUnavailable(); }
+  async requestRematch(): Promise<never> { return onlineUnavailable(); }
+  async issueVisionTicket(): Promise<never> { return onlineUnavailable(); }
   async leaveGame(): Promise<void> {}
   async advanceTurn(): Promise<never> { return onlineUnavailable(); }
   subscribeToGame(): () => void { return () => {}; }

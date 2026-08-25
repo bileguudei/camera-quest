@@ -1,7 +1,7 @@
 "use client";
 
-import { Camera, Check, Copy, Play, Share2, Target, Users } from "lucide-react";
-import { useState } from "react";
+import { Camera, Check, Copy, HeartPulse, Play, ScanFace, Share2, Target, Users } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   GameButton,
@@ -19,6 +19,12 @@ import {
   copyText,
   shareInvite,
 } from "@/features/game/application/inviteLink";
+import { CameraFrame } from "@/features/game/ui/components/CameraFrame";
+import { useCameraContext } from "@/features/camera/CameraProvider";
+import { useCameraPreflight } from "@/features/camera/cameraPreflight";
+import { getGameRepository } from "@/features/game/infrastructure/createGameRepository";
+import { warmVisionService } from "@/features/vision/visionClient";
+import { useMimicTracker } from "@/features/pose-party/application/useMimicTracker";
 
 /** The waiting room. Every phone renders the same server state. */
 export function Lobby() {
@@ -28,10 +34,71 @@ export function Lobby() {
   const quit = useGame((state) => state.quitGame);
   const busy = useGame((state) => state.busy);
   const errorCode = useGame((state) => state.errorCode);
+  const facing = useGame((state) => state.cameraFacing);
+  const { stream, status, retry } = useCameraContext();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const preflight = useCameraPreflight(videoRef, status, false);
+  const [visionReady, setVisionReady] = useState(false);
+  const [visionFailed, setVisionFailed] = useState(false);
+  const [visionAttempt, setVisionAttempt] = useState(0);
+  const [mimicAttempt, setMimicAttempt] = useState(0);
+  const syncingReady = useRef<boolean | null>(null);
   const [notice, setNotice] = useState<"shared" | "copied" | "failed" | null>(
     null,
   );
   const [manualValue, setManualValue] = useState("");
+  const isMimicLobby = lobby?.gameKind === "mimic_rush";
+  const ignoreMimicObservation = useCallback(() => undefined, []);
+  const mimicTracker = useMimicTracker({
+    active: isMimicLobby,
+    videoRef,
+    onObservation: ignoreMimicObservation,
+    retryKey: mimicAttempt,
+  });
+
+  useEffect(() => {
+    if (isMimicLobby) return;
+    const controller = new AbortController();
+    void getGameRepository()
+      .getAccessToken()
+      .then((token) => warmVisionService(token, controller.signal))
+      .then(() => {
+        setVisionReady(true);
+        setVisionFailed(false);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setVisionFailed(true);
+        setVisionReady(false);
+      });
+    return () => controller.abort();
+  }, [isMimicLobby, visionAttempt]);
+  const seated = lobby?.players.filter((player) => !player.left) ?? [];
+  const self = seated.find((player) => player.isSelf);
+  const recognitionReady = isMimicLobby ? mimicTracker.status === "ready" : visionReady;
+  const recognitionFailed = isMimicLobby ? mimicTracker.status === "error" : visionFailed;
+  const thisDeviceReady = preflight.deviceReady && recognitionReady;
+  const readinessSettled =
+    thisDeviceReady ||
+    recognitionFailed ||
+    !preflight.online ||
+    preflight.lighting === "dark" ||
+    status === "denied" ||
+    status === "unavailable";
+
+  useEffect(() => {
+    if (!readinessSettled) return;
+    if (!self || self.ready === thisDeviceReady) {
+      syncingReady.current = null;
+      return;
+    }
+    if (syncingReady.current === thisDeviceReady) return;
+    syncingReady.current = thisDeviceReady;
+    void setReady(thisDeviceReady).finally(() => {
+      syncingReady.current = null;
+    });
+  }, [readinessSettled, self, setReady, thisDeviceReady]);
+
   if (!lobby) return null;
 
   const flash = (value: "shared" | "copied") => {
@@ -63,8 +130,6 @@ export function Lobby() {
   };
 
   const joinCode = lobby.joinCode;
-  const seated = lobby.players.filter((player) => !player.left);
-  const self = seated.find((player) => player.isSelf);
   const everyoneReady =
     seated.length >= 2 && seated.every((player) => player.ready);
 
@@ -144,8 +209,12 @@ export function Lobby() {
       )}
 
       <p className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface/60 px-3 py-1 text-sm font-bold text-ink-2 lg:hidden">
-        <EnvironmentIcon environment={lobby.environment} className="size-4" />
-        {mn.environment.options[lobby.environment].label}
+        {isMimicLobby ? (
+          <ScanFace className="size-4" />
+        ) : (
+          <EnvironmentIcon environment={lobby.environment} className="size-4" />
+        )}
+        {isMimicLobby ? "Mimic Rush · Face Bomb" : mn.environment.options[lobby.environment].label}
       </p>
 
       {/* Desktop only: the column is tall enough that the invite alone leaves a
@@ -153,15 +222,23 @@ export function Lobby() {
       <div className="mt-6 hidden flex-col gap-2.5 border-t border-line/45 pt-5 lg:flex">
         <span className="flex items-center gap-3">
           <span className="grid size-8 shrink-0 place-items-center rounded-g1 border border-primary/30 text-primary">
-            <Target className="size-4" strokeWidth={2.4} />
+            {isMimicLobby ? (
+              <HeartPulse className="size-4" strokeWidth={2.4} />
+            ) : (
+              <Target className="size-4" strokeWidth={2.4} />
+            )}
           </span>
-          <span className="text-sm text-ink-2">{mn.online.factRounds}</span>
+          <span className="text-sm text-ink-2">
+            {isMimicLobby ? mn.online.mimicFactLives : mn.online.factRounds}
+          </span>
         </span>
         <span className="flex items-center gap-3">
           <span className="grid size-8 shrink-0 place-items-center rounded-g1 border border-primary/30 text-primary">
             <Camera className="size-4" strokeWidth={2.2} />
           </span>
-          <span className="text-sm text-ink-2">{mn.online.factWatch}</span>
+          <span className="text-sm text-ink-2">
+            {isMimicLobby ? mn.online.mimicFactTurns : mn.online.factWatch}
+          </span>
         </span>
       </div>
     </>
@@ -191,7 +268,7 @@ export function Lobby() {
             </span>
           ) : (
             <span className="text-xs font-bold text-ink-3">
-              {mn.online.waiting}
+              {!player.connected ? mn.online.disconnected : mn.online.checkingDevice}
             </span>
           )}
         </motion.li>
@@ -224,13 +301,44 @@ export function Lobby() {
 
   const actions = (
     <div className="flex flex-col gap-2.5">
-      <GameButton
-        variant={self?.ready || everyoneReady ? "ghost" : "primary"}
-        onClick={() => void setReady(!self?.ready)}
-        icon={<Check className="size-6" strokeWidth={2.8} />}
+      <p
+        role="status"
+        className={[
+          "text-center text-sm font-bold",
+          thisDeviceReady ? "text-primary" : recognitionFailed ? "text-danger" : "text-ink-3",
+        ].join(" ")}
       >
-        {self?.ready ? mn.online.notReadyCta : mn.online.readyCta}
-      </GameButton>
+        {thisDeviceReady
+          ? isMimicLobby ? mn.online.mimicReady : mn.online.deviceReady
+          : !preflight.online
+            ? mn.camera.steps.network.pending
+            : preflight.lighting === "dark"
+              ? mn.camera.steps.light.dark
+              : status === "denied" || status === "unavailable"
+                ? mn.camera.error.title
+                : recognitionFailed
+                  ? isMimicLobby ? mn.online.mimicUnavailable : mn.online.visionUnavailable
+                  : mn.online.checkingDevice}
+      </p>
+
+      {(status === "denied" || status === "unavailable" || recognitionFailed) && (
+        <GameButton
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            if (isMimicLobby && mimicTracker.status === "error") {
+              setMimicAttempt((attempt) => attempt + 1);
+            }
+            else if (visionFailed) {
+              setVisionFailed(false);
+              setVisionAttempt((attempt) => attempt + 1);
+            }
+            else retry();
+          }}
+        >
+          {mn.camera.error.retry}
+        </GameButton>
+      )}
 
       {/* The start button appears only once it can be pressed, so the screen
           never shows two green buttons competing for the eye. */}
@@ -268,6 +376,14 @@ export function Lobby() {
 
   return (
     <Screen className="justify-between lg:justify-center">
+      <div aria-hidden className="pointer-events-none absolute size-px overflow-hidden opacity-0">
+        <CameraFrame
+          stream={stream}
+          facing={isMimicLobby ? "user" : facing}
+          videoRef={videoRef}
+          className="size-px"
+        />
+      </div>
       {/* Phone: one centred stack. From `lg`: a stage card whose left column
           holds the room and whose right column holds the people and the one
           green action. */}
@@ -291,11 +407,17 @@ export function Lobby() {
             </span>
             <span className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-line/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-ink-2">
-                <EnvironmentIcon
-                  environment={lobby.environment}
-                  className="size-3.5"
-                />
-                {mn.environment.options[lobby.environment].label}
+                {isMimicLobby ? (
+                  <ScanFace className="size-3.5" />
+                ) : (
+                  <EnvironmentIcon
+                    environment={lobby.environment}
+                    className="size-3.5"
+                  />
+                )}
+                {isMimicLobby
+                  ? "Mimic Rush · Face Bomb"
+                  : mn.environment.options[lobby.environment].label}
               </span>
               <span className="rounded-full border border-line/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-ink-2">
                 {seatLabel}
