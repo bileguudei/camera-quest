@@ -592,7 +592,8 @@ select extensions.is(
 );
 
 create temporary table rematch_handle (game_id uuid, ticket uuid);
-grant select, update on rematch_handle to authenticated, service_role;
+grant select, insert, update on rematch_handle to authenticated;
+grant select on rematch_handle to service_role;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', true);
