@@ -103,8 +103,8 @@ begin
   select
     coalesce(jsonb_agg(entry order by seat), '[]'::jsonb),
     min(self_seat),
-    count(*) filter (where not left),
-    count(*) filter (where not left and rematch_ready),
+    count(*) filter (where not has_left),
+    count(*) filter (where not has_left and rematch_ready),
     coalesce(bool_or(rematch_ready) filter (where is_self), false)
   into
     v_players,
@@ -115,7 +115,7 @@ begin
   from (
     select
       gp.seat,
-      gp.left_at is not null as left,
+      gp.left_at is not null as has_left,
       gp.rematch_ready,
       gp.owner_id = v_owner as is_self,
       case when gp.owner_id = v_owner then gp.seat end as self_seat,
