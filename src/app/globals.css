@@ -323,31 +323,33 @@ button {
  * quieter mobile treatment, but reveal the full composition on desktop.
  */
 .landing-background-image {
-  opacity: 0.09;
-  transform: scale(1.25);
-  mask-image: radial-gradient(ellipse at center, black 14%, transparent 62%);
+  object-fit: cover;
+  opacity: 0.12;
+  transform: scale(1.12);
+  mask-image: radial-gradient(ellipse at center, black 22%, transparent 78%);
   -webkit-mask-image: radial-gradient(
     ellipse at center,
-    black 14%,
-    transparent 62%
+    black 22%,
+    transparent 78%
   );
 }
 
 @media (min-width: 64rem) {
   .landing-background-image {
-    opacity: 0.22;
-    transform: scale(1.06);
-    filter: brightness(0.82) saturate(0.9);
+    object-fit: contain;
+    opacity: 0.3;
+    transform: none;
+    filter: brightness(0.88) saturate(0.95);
     mask-image: radial-gradient(
       ellipse at center,
-      black 20%,
-      rgb(0 0 0 / 0.92) 64%,
+      black 24%,
+      rgb(0 0 0 / 0.96) 76%,
       transparent 100%
     );
     -webkit-mask-image: radial-gradient(
       ellipse at center,
-      black 20%,
-      rgb(0 0 0 / 0.92) 64%,
+      black 24%,
+      rgb(0 0 0 / 0.96) 76%,
       transparent 100%
     );
   }

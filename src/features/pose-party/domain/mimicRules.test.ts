@@ -176,6 +176,26 @@ describe("Mimic Rush rules", () => {
     ).toBeLessThan(PASS_SCORE);
   });
 
+  it.each([
+    ["head_turn_left", { pitch: 0, yaw: 0.32, roll: 0 }, { pitch: 0, yaw: -0.32, roll: 0 }],
+    ["head_turn_right", { pitch: 0, yaw: -0.32, roll: 0 }, { pitch: 0, yaw: 0.32, roll: 0 }],
+    ["head_nod_up", { pitch: 0.28, yaw: 0, roll: 0 }, { pitch: -0.28, yaw: 0, roll: 0 }],
+    ["head_nod_down", { pitch: -0.28, yaw: 0, roll: 0 }, { pitch: 0.28, yaw: 0, roll: 0 }],
+    ["head_tilt_left", { pitch: 0, yaw: 0, roll: 0.32 }, { pitch: 0, yaw: 0, roll: -0.32 }],
+    ["head_tilt_right", { pitch: 0, yaw: 0, roll: -0.32 }, { pitch: 0, yaw: 0, roll: 0.32 }],
+  ] as const)("maps %s to exactly one player-space direction", (id, intended, opposite) => {
+    const baseline = buildMimicBaseline([
+      posedObservation({ pitch: 0, yaw: 0, roll: 0 }),
+      posedObservation({ pitch: 0.01, yaw: -0.01, roll: 0.01 }),
+      posedObservation({ pitch: -0.01, yaw: 0.01, roll: -0.01 }),
+    ]);
+
+    expect(scoreMimic(id, posedObservation(intended), baseline)).toBeGreaterThanOrEqual(
+      PASS_SCORE,
+    );
+    expect(scoreMimic(id, posedObservation(opposite), baseline)).toBeLessThan(PASS_SCORE);
+  });
+
   it("returns actionable live feedback for an incomplete expression", () => {
     expect(evaluateMimic("smile", observation({ mouthSmileLeft: 0.12 })).feedback).toMatch(
       /Илүү чанга инээгээрэй/,

@@ -54,8 +54,25 @@ export function Landing() {
 
   return (
     <Screen className="justify-between">
+      {/* Keep the artwork on the viewport stage itself. Nesting it in the
+          flexible middle region clipped the image above the footer and below
+          the nav, and `object-cover` discarded its outer photo cards. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      >
+        <Image
+          src="/images/background2.png"
+          alt=""
+          fill
+          sizes="100vw"
+          priority
+          className="landing-background-image"
+        />
+      </div>
+
       {/* Top nav */}
-      <div className="flex shrink-0 items-center px-1 pt-1">
+      <div className="relative z-10 flex shrink-0 items-center px-1 pt-1">
         <div className="flex items-center gap-1.5">
           <span className="grid size-7 place-items-center rounded-lg bg-primary/15 text-primary">
             <Camera className="size-4" strokeWidth={2} />
@@ -66,19 +83,7 @@ export function Landing() {
         </div>
       </div>
 
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-[clamp(0.25rem,1.4vh,0.875rem)] overflow-hidden">
-        {/* Background image */}
-        <div className="pointer-events-none absolute inset-0 z-0">
-          <Image
-            src="/images/background2.png"
-            alt=""
-            fill
-            sizes="100vw"
-            priority
-            className="landing-background-image object-cover"
-          />
-        </div>
-
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-[clamp(0.25rem,1.4vh,0.875rem)] overflow-hidden">
         {/* Ambient glow */}
         <span
           aria-hidden
@@ -217,7 +222,7 @@ export function Landing() {
         </motion.div>
       </div>
 
-      <ScreenFooter>
+      <ScreenFooter className="relative z-10">
         <motion.div
           custom={6}
           variants={fadeUp}
