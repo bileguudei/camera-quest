@@ -29,10 +29,10 @@ export function headPoseFromMatrix(data: readonly number[]): HeadPose | null {
   const rawYaw = Math.asin(clamp(m13, -1, 1));
   const gimbalLock = Math.abs(m13) >= 0.999_999_9;
   const rawPitch = gimbalLock ? Math.atan2(m32, m22) : Math.atan2(-m23, m33);
-  const roll = gimbalLock ? 0 : Math.atan2(-m12, m11);
+  const rawRoll = gimbalLock ? 0 : Math.atan2(-m12, m11);
 
   // MediaPipe evaluates the unmirrored camera frame while the player sees a
-  // mirrored selfie preview. Normalize horizontal and vertical rotations to
-  // the directions named on-screen so “left” and “up” never pass opposites.
-  return { pitch: -rawPitch, yaw: -rawYaw, roll };
+  // mirrored selfie preview. Normalize every rotation to the directions named
+  // on-screen so “left”, “right”, “up”, and “down” never pass their opposites.
+  return { pitch: -rawPitch, yaw: -rawYaw, roll: -rawRoll };
 }

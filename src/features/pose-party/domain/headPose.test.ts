@@ -71,9 +71,9 @@ const rotationY = (radians: number) => {
 };
 
 describe("head pose extraction", () => {
-  it("extracts stable roll from MediaPipe's column-major transform", () => {
-    expect(headPoseFromMatrix(rotationZ(0.3))?.roll).toBeCloseTo(0.3, 5);
-    expect(headPoseFromMatrix(rotationZ(-0.25))?.roll).toBeCloseTo(-0.25, 5);
+  it("normalizes raw roll to the player's mirrored shoulder direction", () => {
+    expect(headPoseFromMatrix(rotationZ(0.3))?.roll).toBeCloseTo(-0.3, 5);
+    expect(headPoseFromMatrix(rotationZ(-0.25))?.roll).toBeCloseTo(0.25, 5);
   });
 
   it("normalizes raw yaw and pitch to the player's mirrored selfie directions", () => {
