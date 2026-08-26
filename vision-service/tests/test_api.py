@@ -58,6 +58,29 @@ def make_app() -> FastAPI:
 
 
 @pytest.mark.asyncio
+async def test_cors_preflight_allows_device_identity_header() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=make_app()), base_url="http://test"
+    ) as client:
+        response = await client.options(
+            "/v1/warmup",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": (
+                    "authorization,content-type,x-camera-quest-device"
+                ),
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert "x-camera-quest-device" in response.headers[
+        "access-control-allow-headers"
+    ].lower()
+
+
+@pytest.mark.asyncio
 async def test_warmup_requires_authentication() -> None:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=make_app()), base_url="http://test"
