@@ -178,7 +178,7 @@ export type Database = {
           {
             foreignKeyName: "games_rematch_of_fkey"
             columns: ["rematch_of"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "games"
             referencedColumns: ["id"]
           },
@@ -851,10 +851,8 @@ export type Database = {
         }
         Returns: undefined
       }
-      recover_disconnected_turn: {
-        Args: { p_turn_id: string }
-        Returns: Json
-      }
+      recover_disconnected_turn: { Args: { p_turn_id: string }; Returns: Json }
+      request_rematch: { Args: { p_game_id: string }; Returns: Json }
       resolve_turn: {
         Args: {
           p_confidence: number
@@ -868,7 +866,6 @@ export type Database = {
         }
         Returns: Json
       }
-      request_rematch: { Args: { p_game_id: string }; Returns: Json }
       seat_avatar: { Args: { p_seat: number }; Returns: string }
       seat_color: { Args: { p_seat: number }; Returns: string }
       set_player_ready: {
@@ -1020,6 +1017,7 @@ export const Constants = {
   public: {
     Enums: {
       game_environment: ["school", "home", "outdoor"],
+      game_kind: ["camera_quest", "mimic_rush"],
       game_mode: ["local", "online"],
       game_status: ["active", "completed", "abandoned"],
       quest_difficulty: ["easy", "medium", "hard"],
