@@ -12,6 +12,7 @@ export type Phase =
   | "playing"
   | "turnResult"
   | "roundResult"
+  | "mimicBattle"
   | "winner";
 
 export type PlayerColorKey =
@@ -37,6 +38,7 @@ export interface Player {
 }
 
 export type GameMode = "local" | "online";
+export type GameKind = "camera_quest" | "mimic_rush";
 
 /** The room the host is playing in. It decides which objects can be asked for. */
 export type GameEnvironment = "school" | "home" | "outdoor";
@@ -44,7 +46,41 @@ export type GameEnvironment = "school" | "home" | "outdoor";
 export interface LobbyPlayer extends Player {
   ready: boolean;
   left: boolean;
+  connected: boolean;
+  isHost: boolean;
   isSelf: boolean;
+  /** Present only in an online Mimic Rush match. */
+  mimicLives?: number;
+  mimicEliminated?: boolean;
+}
+
+export type MimicBattleTurnStatus = "prepared" | "active" | "passed" | "failed";
+
+export interface MimicBattleTurn {
+  turnId: string;
+  turnNumber: number;
+  seat: number;
+  challengeId: import("@/features/pose-party/domain/mimicRules").MimicChallengeId;
+  status: MimicBattleTurnStatus;
+  preparedAt: string;
+  deadlineAt: string | null;
+  durationMs: number;
+}
+
+export interface MimicBattleResult {
+  turnId: string;
+  seat: number;
+  challengeId: import("@/features/pose-party/domain/mimicRules").MimicChallengeId;
+  success: boolean;
+  livesAfter: number;
+}
+
+/** Server-owned Face Bomb state carried inside the normal lobby snapshot. */
+export interface MimicBattleState {
+  turn: MimicBattleTurn | null;
+  lastResult: MimicBattleResult | null;
+  winnerSeat: number | null;
+  serverNow: string;
 }
 
 export type TurnStatus = "prepared" | "active" | "passed" | "timed_out" | "aborted";
@@ -64,6 +100,7 @@ export interface LobbyTurn {
 export interface LobbyState {
   gameId: string;
   mode: GameMode;
+  gameKind: GameKind;
   environment: GameEnvironment;
   status: "active" | "completed" | "abandoned";
   joinCode: string | null;
@@ -74,6 +111,10 @@ export interface LobbyState {
   selfSeat: number | null;
   players: LobbyPlayer[];
   lastTurn: LobbyTurn | null;
+  rematchReadyCount: number;
+  rematchPlayerCount: number;
+  selfRematchReady: boolean;
+  mimicBattle: MimicBattleState | null;
 }
 
 /** Presentation-only live view of the active player's camera. Never scored. */

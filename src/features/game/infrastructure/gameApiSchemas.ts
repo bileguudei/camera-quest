@@ -3,6 +3,21 @@ import { z } from "zod";
 const colorSchema = z.enum(["violet", "blue", "lime", "orange", "pink", "cyan"]);
 const serverTimestampSchema = z.iso.datetime({ offset: true });
 const environmentSchema = z.enum(["school", "home", "outdoor"]);
+const gameKindSchema = z.enum(["camera_quest", "mimic_rush"]);
+const mimicChallengeIdSchema = z.enum([
+  "fusion_smile_wink_left",
+  "fusion_smile_wink_right",
+  "fusion_surprise_brow",
+  "fusion_kiss_eyes",
+  "fusion_frown_squint",
+  "fusion_smile_brow",
+  "fusion_smile_tilt_left",
+  "fusion_surprise_turn_right",
+  "fusion_kiss_tilt_right",
+  "fusion_frown_turn_left",
+  "fusion_brow_nod_up",
+  "fusion_squint_nod_down",
+]);
 
 export const playerSchema = z.object({
   id: z.uuid(),
@@ -75,7 +90,37 @@ export const expireTurnSchema = z.object({
 const lobbyPlayerSchema = playerSchema.extend({
   ready: z.boolean(),
   left: z.boolean(),
+  connected: z.boolean(),
+  isHost: z.boolean(),
   isSelf: z.boolean(),
+  mimicLives: z.number().int().min(0).max(3).optional(),
+  mimicEliminated: z.boolean().optional(),
+});
+
+const mimicBattleTurnSchema = z.object({
+  turnId: z.uuid(),
+  turnNumber: z.number().int().nonnegative(),
+  seat: z.number().int().min(1).max(6),
+  challengeId: mimicChallengeIdSchema,
+  status: z.enum(["prepared", "active", "passed", "failed"]),
+  preparedAt: serverTimestampSchema,
+  deadlineAt: serverTimestampSchema.nullish().transform((value) => value ?? null),
+  durationMs: z.number().int().min(4_000).max(7_000),
+});
+
+const mimicBattleResultSchema = z.object({
+  turnId: z.uuid(),
+  seat: z.number().int().min(1).max(6),
+  challengeId: mimicChallengeIdSchema,
+  success: z.boolean(),
+  livesAfter: z.number().int().min(0).max(3),
+});
+
+const mimicBattleStateSchema = z.object({
+  turn: mimicBattleTurnSchema.nullish().transform((value) => value ?? null),
+  lastResult: mimicBattleResultSchema.nullish().transform((value) => value ?? null),
+  winnerSeat: z.number().int().min(1).max(6).nullish().transform((value) => value ?? null),
+  serverNow: serverTimestampSchema,
 });
 
 const lobbyTurnSchema = z
@@ -94,6 +139,7 @@ const lobbyTurnSchema = z
 export const lobbyStateSchema = z.object({
   gameId: z.uuid(),
   mode: z.enum(["local", "online"]),
+  gameKind: gameKindSchema.default("camera_quest"),
   environment: environmentSchema,
   status: z.enum(["active", "completed", "abandoned"]),
   joinCode: z.string().length(6).nullish().transform((value) => value ?? null),
@@ -104,6 +150,15 @@ export const lobbyStateSchema = z.object({
   selfSeat: z.number().int().min(1).max(6).nullish().transform((value) => value ?? null),
   players: z.array(lobbyPlayerSchema).min(1).max(6),
   lastTurn: lobbyTurnSchema.nullish().transform((value) => value ?? null),
+  rematchReadyCount: z.number().int().nonnegative(),
+  rematchPlayerCount: z.number().int().nonnegative(),
+  selfRematchReady: z.boolean(),
+  mimicBattle: mimicBattleStateSchema.nullish().transform((value) => value ?? null),
+});
+
+export const visionTicketSchema = z.object({
+  ticket: z.uuid(),
+  expiresAt: serverTimestampSchema,
 });
 
 /** Broadcast payloads come from another player's browser, so they are validated. */

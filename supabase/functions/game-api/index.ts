@@ -71,6 +71,8 @@ Deno.serve(async (request) => {
         return client.rpc("activate_turn", { p_turn_id: parsed.payload.turnId });
       case "expire-turn":
         return client.rpc("expire_turn", { p_turn_id: parsed.payload.turnId });
+      case "recover-disconnected-turn":
+        return client.rpc("recover_disconnected_turn", { p_turn_id: parsed.payload.turnId });
       case "complete-game":
         return client.rpc("complete_game", { p_game_id: parsed.payload.gameId });
       case "abandon-game":
@@ -79,6 +81,7 @@ Deno.serve(async (request) => {
         return client.rpc("create_online_game", {
           p_name: parsed.payload.name,
           p_environment: parsed.payload.environment,
+          p_game_kind: parsed.payload.gameKind,
         });
       case "join-game":
         return client.rpc("join_game", {
@@ -96,6 +99,21 @@ Deno.serve(async (request) => {
         return client.rpc("leave_game", { p_game_id: parsed.payload.gameId });
       case "start-online-game":
         return client.rpc("start_online_game", { p_game_id: parsed.payload.gameId });
+      case "activate-mimic-turn":
+        return client.rpc("activate_mimic_turn", { p_turn_id: parsed.payload.turnId });
+      case "pass-mimic-turn":
+        return client.rpc("pass_mimic_turn", { p_turn_id: parsed.payload.turnId });
+      case "expire-mimic-turn":
+        return client.rpc("expire_mimic_turn", { p_turn_id: parsed.payload.turnId });
+      case "heartbeat-game":
+        return client.rpc("heartbeat_game", { p_game_id: parsed.payload.gameId });
+      case "request-rematch":
+        return client.rpc("request_rematch", { p_game_id: parsed.payload.gameId });
+      case "issue-vision-ticket":
+        return client.rpc("issue_vision_ticket", {
+          p_game_id: parsed.payload.gameId,
+          p_purpose: "calibrate",
+        });
       case "advance-turn":
         return client.rpc("advance_turn_pointer", {
           p_game_id: parsed.payload.gameId,
@@ -111,6 +129,8 @@ Deno.serve(async (request) => {
       "TURN_EXPIRED", "TURN_NOT_ACTIVE", "GAME_NOT_OWNED", "NO_QUEST_AVAILABLE",
       "GAME_NOT_FOUND", "LOBBY_FULL", "LOBBY_CLOSED", "NOT_YOUR_TURN",
       "TURN_STILL_OPEN", "NOT_ENOUGH_PLAYERS", "JOIN_CODE_UNAVAILABLE",
+      "REMATCH_NOT_AVAILABLE", "INVALID_VISION_PURPOSE",
+      "PLAYERS_NOT_READY", "MIMIC_TURN_NOT_READY", "MIMIC_TURN_EXPIRED",
     ];
     const code = known.find((value) => result.error.message.includes(value)) ?? "GAME_UNAVAILABLE";
     return json(origin, { code, message: code }, code === "GAME_UNAVAILABLE" ? 503 : 409);

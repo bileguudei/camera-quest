@@ -5,6 +5,7 @@ import { z } from "npm:zod@4";
 const displayName = z.string().trim().min(1).max(24);
 // The room the host plays in; the RPC draws every quest of the game from it.
 const environment = z.enum(["school", "home", "outdoor"]);
+const gameKind = z.enum(["camera_quest", "mimic_rush"]);
 
 export const commandSchema = z.discriminatedUnion("command", [
   z.object({
@@ -39,12 +40,16 @@ export const commandSchema = z.discriminatedUnion("command", [
     payload: z.object({ turnId: z.string().uuid() }),
   }),
   z.object({
+    command: z.literal("recover-disconnected-turn"),
+    payload: z.object({ turnId: z.string().uuid() }),
+  }),
+  z.object({
     command: z.literal("complete-game"),
     payload: z.object({ gameId: z.string().uuid() }),
   }),
   z.object({
     command: z.literal("create-online-game"),
-    payload: z.object({ name: displayName, environment }),
+    payload: z.object({ name: displayName, environment, gameKind }),
   }),
   z.object({
     command: z.literal("join-game"),
@@ -69,6 +74,30 @@ export const commandSchema = z.discriminatedUnion("command", [
   }),
   z.object({
     command: z.literal("start-online-game"),
+    payload: z.object({ gameId: z.string().uuid() }),
+  }),
+  z.object({
+    command: z.literal("activate-mimic-turn"),
+    payload: z.object({ turnId: z.string().uuid() }),
+  }),
+  z.object({
+    command: z.literal("pass-mimic-turn"),
+    payload: z.object({ turnId: z.string().uuid() }),
+  }),
+  z.object({
+    command: z.literal("expire-mimic-turn"),
+    payload: z.object({ turnId: z.string().uuid() }),
+  }),
+  z.object({
+    command: z.literal("heartbeat-game"),
+    payload: z.object({ gameId: z.string().uuid() }),
+  }),
+  z.object({
+    command: z.literal("request-rematch"),
+    payload: z.object({ gameId: z.string().uuid() }),
+  }),
+  z.object({
+    command: z.literal("issue-vision-ticket"),
     payload: z.object({ gameId: z.string().uuid() }),
   }),
   z.object({

@@ -63,6 +63,10 @@ export const mn = {
     you: "(та)",
     ready: "Бэлэн",
     waiting: "Хүлээж байна",
+    disconnected: "Холболт тасарсан",
+    checkingDevice: "Төхөөрөмжөө шалгаж байна",
+    deviceReady: "Таны камер, сүлжээ, гэрэлтүүлэг бэлэн",
+    visionUnavailable: "AI үйлчилгээтэй холбогдож чадсангүй",
     readyCta: "Би бэлэн",
     notReadyCta: "Бэлэн биш",
     startCta: "Тоглоом эхлүүлэх",
@@ -72,6 +76,10 @@ export const mn = {
     emptySeat: "Сул суудал",
     factRounds: "5 раунд · ээлж бүр 30 секунд",
     factWatch: "Хүлээж байхдаа бусдын камерыг шууд харна",
+    mimicFactLives: "Face Bomb · хүн бүр 3 life-тай",
+    mimicFactTurns: "7 секундээс эхлээд lap бүр хурдсана",
+    mimicReady: "Камер болон нүүр танилт бэлэн",
+    mimicUnavailable: "Нүүр таних model ачаалж чадсангүй",
     inheritHint:
       "Нэгдэж буй тоглогч орчноо сонгохгүй — өрөөний эзний сонгосон орчныг өвлөнө.",
     leave: "Өрөөнөөс гарах",
@@ -93,6 +101,12 @@ export const mn = {
     sub: "Бүх зүйл бэлэн болмогц эхэлнэ.",
     steps: {
       camera: { pending: "Камер шалгаж байна...", done: "Камер холбогдлоо" },
+      network: { pending: "Интернэт холболтгүй", done: "Интернэт холбогдлоо" },
+      light: {
+        pending: "Гэрэлтүүлэг шалгаж байна...",
+        dark: "Хэт харанхуй байна — гэрлээ асаана уу",
+        done: "Гэрэлтүүлэг хангалттай",
+      },
       model: { pending: "AI model ачаалж байна...", done: "AI model ачааллаа" },
       ready: {
         pending: "AI model бэлдэж байна...",
@@ -201,6 +215,8 @@ export const mn = {
     again: "Дахин тоглох",
     newGame: "Шинэ тоглоом",
     soloDone: "Тоглоом дууслаа",
+    rematchStatus: (ready: number, total: number) =>
+      `Дахин тоглох хүсэлт: ${ready}/${total}`,
   },
 
   common: {

@@ -110,11 +110,13 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - run: npm run test:edge
+      - name: Edge Function contract and reliability commands
+        run: npm run test:edge
       - name: Start local Supabase
         run: supabase start
         timeout-minutes: 10
       - run: supabase db reset
-      - run: supabase test db
+      - name: pgTAP authorization, recovery, rematch, and vision controls
+        run: supabase test db
       - run: npm run generate:database
       - run: git diff --exit-code -- src/generated/database.types.ts

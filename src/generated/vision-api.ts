@@ -80,6 +80,8 @@ export interface components {
         Body_calibrate_v1_calibrate_post: {
             /** Frames */
             frames: string[];
+            /** Ticket */
+            ticket?: string | null;
         };
         /** Body_validate_v1_validate_post */
         Body_validate_v1_validate_post: {
@@ -219,6 +221,7 @@ export interface operations {
             query?: never;
             header?: {
                 authorization?: string | null;
+                "X-Camera-Quest-Device"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -254,6 +257,7 @@ export interface operations {
             query?: never;
             header?: {
                 authorization?: string | null;
+                "X-Camera-Quest-Device"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -289,6 +293,7 @@ export interface operations {
             query?: never;
             header?: {
                 authorization?: string | null;
+                "X-Camera-Quest-Device"?: string | null;
             };
             path?: never;
             cookie?: never;

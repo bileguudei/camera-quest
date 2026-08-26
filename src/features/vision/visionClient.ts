@@ -13,6 +13,7 @@ import {
   type CalibrationResponse,
   type VisionVerdict,
 } from "./visionTypes";
+import { visionDeviceId } from "./deviceIdentity";
 
 const visionErrorSchema = z.object({
   code: z.string().optional(),
@@ -60,7 +61,10 @@ async function postMultipart<T>(
 ): Promise<T> {
   const response = await fetch(endpoint(path), {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Camera-Quest-Device": visionDeviceId(),
+    },
     body,
     signal,
   });
@@ -84,9 +88,11 @@ async function postMultipart<T>(
 export async function calibrate(
   video: HTMLVideoElement,
   accessToken: string,
+  ticket: string,
   signal?: AbortSignal,
 ): Promise<CalibrationResponse> {
   const body = new FormData();
+  body.set("ticket", ticket);
   appendFrames(body, await captureFrameBatch(video, signal));
   return postMultipart(
     "/v1/calibrate",
@@ -200,6 +206,7 @@ class WebSocketTurnVisionStream implements TurnVisionStream {
               accessToken: this.accessToken,
               turnId: this.turnId,
               calibrationToken: this.calibrationToken,
+              deviceId: visionDeviceId(),
             }),
           );
           resolve(socket);
@@ -400,7 +407,10 @@ export async function warmVisionService(
   if (!request) {
     request = fetch(endpoint("/v1/warmup"), {
       method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "X-Camera-Quest-Device": visionDeviceId(),
+      },
     }).then((response) => {
       if (!response.ok) throw new AppError("VISION_UNAVAILABLE", "Vision warm-up failed", true);
       rememberWarmup();

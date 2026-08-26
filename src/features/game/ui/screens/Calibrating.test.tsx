@@ -5,6 +5,7 @@ import { Calibrating } from "./Calibrating";
 const mocks = vi.hoisted(() => ({
   calibrate: vi.fn(),
   getAccessToken: vi.fn(),
+  issueVisionTicket: vi.fn(),
   prepareTurn: vi.fn(),
   preparationFailed: vi.fn(),
   retry: vi.fn(),
@@ -16,7 +17,10 @@ vi.mock("@/features/camera/CameraProvider", () => ({
 }));
 
 vi.mock("@/features/game/infrastructure/createGameRepository", () => ({
-  getGameRepository: () => ({ getAccessToken: mocks.getAccessToken }),
+  getGameRepository: () => ({
+    getAccessToken: mocks.getAccessToken,
+    issueVisionTicket: mocks.issueVisionTicket,
+  }),
 }));
 
 vi.mock("@/features/vision/visionClient", () => ({ calibrate: mocks.calibrate }));
@@ -27,6 +31,7 @@ vi.mock("@/features/game/application/useGame", () => ({
       cameraFacing: "user",
       cameraMode: "live",
       backendMode: "supabase",
+      gameId: "10000000-0000-4000-8000-000000000001",
       // Fresh wrappers reproduce the unstable action identities from a new XState snapshot.
       prepareTurn: (payload: unknown) => mocks.prepareTurn(payload),
       preparationFailed: (code: string) => mocks.preparationFailed(code),
@@ -56,12 +61,21 @@ describe("Calibrating", () => {
     vi.clearAllMocks();
     mocks.stream = {} as MediaStream;
     mocks.getAccessToken.mockResolvedValue("access-token");
+    mocks.issueVisionTicket.mockResolvedValue({
+      ticket: "20000000-0000-4000-8000-000000000001",
+      expiresAt: "2026-08-24T00:00:45+00:00",
+    });
   });
 
   it("does not abort calibration when XState action identities change", async () => {
     let finishCalibration: ((value: unknown) => void) | undefined;
     mocks.calibrate.mockImplementation(
-      (_video: HTMLVideoElement, _token: string, signal: AbortSignal) =>
+      (
+        _video: HTMLVideoElement,
+        _token: string,
+        _ticket: string,
+        signal: AbortSignal,
+      ) =>
         new Promise((resolve, reject) => {
           finishCalibration = resolve;
           signal.addEventListener(

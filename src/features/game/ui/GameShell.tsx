@@ -17,6 +17,7 @@ import { PlayerHandoff } from "@/features/game/ui/screens/PlayerHandoff";
 import { QuestReveal } from "@/features/game/ui/screens/QuestReveal";
 import { TurnResult } from "@/features/game/ui/screens/TurnResult";
 import { Winner } from "@/features/game/ui/screens/Winner";
+import { MimicBattle } from "@/features/pose-party/ui/MimicBattle";
 import { useGame } from "@/features/game/application/useGame";
 import type { Phase } from "@/features/game/domain/types";
 import { CameraProvider } from "@/features/camera/CameraProvider";
@@ -38,6 +39,7 @@ const SCREENS: Record<Phase, () => React.JSX.Element | null> = {
   playing: Play,
   turnResult: TurnResult,
   roundResult: RoundResult,
+  mimicBattle: MimicBattle,
   winner: Winner,
 };
 

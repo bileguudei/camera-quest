@@ -133,6 +133,33 @@ class SupabaseGateway:
     async def abort_turn(self, turn_id: str, reason: str) -> None:
         await self._rpc("abort_turn", {"p_turn_id": turn_id, "p_reason": reason})
 
+    async def claim_vision_budget(
+        self,
+        bucket_key: str,
+        limit: int,
+        window_seconds: int,
+    ) -> bool:
+        result = await self._rpc(
+            "claim_vision_budget",
+            {
+                "p_bucket_key": bucket_key,
+                "p_limit": limit,
+                "p_window_seconds": window_seconds,
+            },
+        )
+        return result is True
+
+    async def consume_vision_ticket(self, ticket: str, owner_id: str) -> bool:
+        result = await self._rpc(
+            "consume_vision_ticket",
+            {"p_ticket": ticket, "p_owner_id": owner_id, "p_purpose": "calibrate"},
+        )
+        return result is True
+
+    async def vision_service_enabled(self) -> bool:
+        result = await self._rpc("vision_service_state", {})
+        return isinstance(result, dict) and result.get("enabled") is True
+
     async def _rpc(self, name: str, payload: dict[str, Any]) -> Any:
         try:
             response = await self._client.post(f"/rest/v1/rpc/{name}", json=payload)

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { FunctionRegion } from "@supabase/supabase-js";
-import type { GameEnvironment, LobbyState } from "@/features/game/domain/types";
+import type { GameEnvironment, GameKind, LobbyState } from "@/features/game/domain/types";
 import type { GameRepository } from "./gameRepository";
 import type {
   CreateGameInput,
@@ -19,12 +19,14 @@ import {
   gameSessionSchema,
   lobbyStateSchema,
   preparedTurnSchema,
+  visionTicketSchema,
 } from "./gameApiSchemas";
 import {
   ensureAnonymousAccessToken,
   getSupabaseBrowserClient,
 } from "@/shared/supabase/browserClient";
 import { AppError } from "@/shared/errors/appError";
+import { RealtimeSignalQueue } from "../application/realtimeSignalQueue";
 
 /** Realtime is the fast path; this is the safety net behind it. */
 const LOBBY_POLL_MS = 10_000;
@@ -64,6 +66,12 @@ export class SupabaseGameRepository implements GameRepository {
     return expireTurnSchema.parse(await this.command("expire-turn", { turnId }));
   }
 
+  async recoverDisconnectedTurn(turnId: string) {
+    return lobbyStateSchema.parse(
+      await this.command("recover-disconnected-turn", { turnId }),
+    );
+  }
+
   async completeGame(gameId: string) {
     await this.command("complete-game", { gameId });
   }
@@ -85,9 +93,9 @@ export class SupabaseGameRepository implements GameRepository {
     if (result.error) throw result.error;
   }
 
-  async createOnlineGame(name: string, environment: GameEnvironment) {
+  async createOnlineGame(name: string, environment: GameEnvironment, gameKind: GameKind) {
     return lobbyStateSchema.parse(
-      await this.command("create-online-game", { name, environment }),
+      await this.command("create-online-game", { name, environment, gameKind }),
     );
   }
 
@@ -107,6 +115,32 @@ export class SupabaseGameRepository implements GameRepository {
 
   async startOnlineGame(gameId: string) {
     return lobbyStateSchema.parse(await this.command("start-online-game", { gameId }));
+  }
+
+  async activateMimicTurn(turnId: string) {
+    return lobbyStateSchema.parse(await this.command("activate-mimic-turn", { turnId }));
+  }
+
+  async passMimicTurn(turnId: string) {
+    return lobbyStateSchema.parse(await this.command("pass-mimic-turn", { turnId }));
+  }
+
+  async expireMimicTurn(turnId: string) {
+    return lobbyStateSchema.parse(await this.command("expire-mimic-turn", { turnId }));
+  }
+
+  async heartbeatGame(gameId: string) {
+    return lobbyStateSchema.parse(await this.command("heartbeat-game", { gameId }));
+  }
+
+  async requestRematch(gameId: string) {
+    return lobbyStateSchema.parse(await this.command("request-rematch", { gameId }));
+  }
+
+  async issueVisionTicket(gameId: string) {
+    return visionTicketSchema.parse(
+      await this.command("issue-vision-ticket", { gameId }),
+    );
   }
 
   async leaveGame(gameId: string) {
@@ -149,7 +183,14 @@ export class SupabaseGameRepository implements GameRepository {
     };
 
     const channel = client.channel(`game:${gameId}`);
-    for (const table of ["games", "game_players", "turns"] as const) {
+    for (const table of [
+      "games",
+      "game_players",
+      "turns",
+      "mimic_matches",
+      "mimic_player_states",
+      "mimic_turns",
+    ] as const) {
       channel.on(
         "postgres_changes",
         {
@@ -185,6 +226,8 @@ export class SupabaseGameRepository implements GameRepository {
       config: { private: true, broadcast: { self: false } },
     });
     let ready = false;
+    let closed = false;
+    const pendingSignals = new RealtimeSignalQueue();
 
     channel.on("broadcast", { event: "frame" }, (message) => {
       const frame = turnPreviewFrameSchema.safeParse(message.payload);
@@ -202,6 +245,10 @@ export class SupabaseGameRepository implements GameRepository {
         client.realtime.setAuth(token);
         channel.subscribe((status) => {
           ready = status === "SUBSCRIBED";
+          if (!ready || closed) return;
+          for (const signal of pendingSignals.drain()) {
+            void channel.send({ type: "broadcast", event: "signal", payload: signal });
+          }
         });
       })
       .catch(() => {
@@ -209,17 +256,26 @@ export class SupabaseGameRepository implements GameRepository {
       });
 
     const send = (event: string, payload: unknown) => {
-      // Dropping a message while the socket is still joining is correct: the
-      // watch ping repeats and the turn clock never waits for a preview.
       if (!ready) return;
       void channel.send({ type: "broadcast", event, payload });
     };
 
     return {
       publishFrame: (frame) => send("frame", frame),
-      publishSignal: (signal) => send("signal", signal),
+      publishSignal: (signal) => {
+        // Offers, answers and ICE are one-shot messages. Realtime can still be
+        // joining when they are created, so preserve their exact order until
+        // SUBSCRIBED. Watch heartbeats remain naturally replaceable.
+        if (!ready) {
+          pendingSignals.push(signal);
+          return;
+        }
+        send("signal", signal);
+      },
       close: () => {
+        closed = true;
         ready = false;
+        pendingSignals.clear();
         void client.removeChannel(channel);
       },
     };

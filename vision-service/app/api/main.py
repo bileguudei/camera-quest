@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
+from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -30,7 +31,8 @@ from app.models.turn import ActiveTurn, CalibrationClaims
 from app.observability.sentry import configure_sentry
 from app.security.calibration_token import InvalidCalibrationToken
 from app.security.jwt_verifier import InvalidAccessToken, Principal
-from app.security.rate_limit import RateLimitExceeded, SequenceReplay
+from app.security.rate_limit import RateLimitExceeded, SequenceReplay, SubjectRateLimiter
+from app.security.vision_control import VisionDisabled
 from app.validators.base import Frame, ValidationResult, Validator
 
 if TYPE_CHECKING:
@@ -63,9 +65,51 @@ def create_app(services: Services) -> FastAPI:
         allow_origins=services.settings.cors_origins,
         allow_credentials=False,
         allow_methods=["POST", "GET"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Camera-Quest-Device"],
         max_age=600,
     )
+    # Test doubles created before these fields existed keep working, while the
+    # production Services instance supplies the same bounded policies.
+    warmup_limiter = getattr(
+        services,
+        "warmup_limiter",
+        SubjectRateLimiter(max_requests=3, window_seconds=60),
+    )
+    calibration_limiter = getattr(
+        services,
+        "calibration_limiter",
+        SubjectRateLimiter(max_requests=6, window_seconds=60),
+    )
+    validation_limiter = getattr(
+        services,
+        "validation_limiter",
+        SubjectRateLimiter(max_requests=180, window_seconds=60),
+    )
+    warmup_lock = asyncio.Lock()
+    warm_until = 0.0
+
+    def client_ip(headers: Headers, fallback: str | None) -> str:
+        # Prefer ASGI's peer address so a caller cannot forge a forwarded-for
+        # bucket. The header is only a fallback for runtimes without a client.
+        forwarded = headers.get("x-forwarded-for")
+        if fallback:
+            return fallback
+        return str(forwarded).split(",", 1)[0].strip() if forwarded else "unknown"
+
+    async def distributed_guard(
+        action: str,
+        principal: Principal,
+        ip: str,
+        device_id: str | None,
+    ) -> None:
+        guard = getattr(services, "abuse_guard", None)
+        if guard is not None:
+            await guard.check(action, principal.subject, ip, device_id or "missing")
+
+    async def ensure_vision_enabled() -> None:
+        control = getattr(services, "vision_control", None)
+        if control is not None:
+            await control.ensure_enabled()
 
     async def authenticate(authorization: str | None) -> Principal:
         if not authorization or not authorization.startswith("Bearer "):
@@ -204,11 +248,37 @@ def create_app(services: Services) -> FastAPI:
         return HealthResponse(model_version=services.settings.model_version)
 
     @app.post("/v1/warmup", status_code=204)
-    async def warmup(authorization: Annotated[str | None, Header()] = None) -> Response:
-        await authenticate(authorization)
-        # Warm both remote dependencies before the 30-second clock starts.
+    async def warmup(
+        request: Request,
+        authorization: Annotated[str | None, Header()] = None,
+        device_id: Annotated[str | None, Header(alias="X-Camera-Quest-Device")] = None,
+    ) -> Response:
+        nonlocal warm_until
+        principal = await authenticate(authorization)
         try:
-            await asyncio.gather(services.detector.warm(), services.gateway.warm())
+            warmup_limiter.check(principal.subject)
+            await ensure_vision_enabled()
+            await distributed_guard(
+                "warmup",
+                principal,
+                client_ip(request.headers, request.client.host if request.client else None),
+                device_id,
+            )
+        except RateLimitExceeded as error:
+            raise HTTPException(status_code=429, detail={"code": "RATE_LIMITED"}) from error
+        except VisionDisabled as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_DISABLED"}) from error
+        except GatewayUnavailable as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_UNAVAILABLE"}) from error
+
+        # One warm operation per container per minute is enough. Concurrent
+        # callers share the lock and reuse that result instead of multiplying
+        # GPU allocations.
+        try:
+            async with warmup_lock:
+                if time.monotonic() >= warm_until:
+                    await asyncio.gather(services.detector.warm(), services.gateway.warm())
+                    warm_until = time.monotonic() + 60
         except Exception as error:
             # Modal capacity and Supabase warm-up failures are both transient;
             # expose one retryable contract instead of leaking a generic 500.
@@ -220,10 +290,39 @@ def create_app(services: Services) -> FastAPI:
 
     @app.post("/v1/calibrate", response_model=CalibrationResponse)
     async def calibrate(
+        request: Request,
         frames: Annotated[list[UploadFile], File()],
+        ticket: Annotated[str | None, Form()] = None,
         authorization: Annotated[str | None, Header()] = None,
+        device_id: Annotated[str | None, Header(alias="X-Camera-Quest-Device")] = None,
     ) -> CalibrationResponse:
         principal = await authenticate(authorization)
+        try:
+            calibration_limiter.check(principal.subject)
+            await ensure_vision_enabled()
+            await distributed_guard(
+                "calibrate",
+                principal,
+                client_ip(request.headers, request.client.host if request.client else None),
+                device_id,
+            )
+        except RateLimitExceeded as error:
+            raise HTTPException(status_code=429, detail={"code": "RATE_LIMITED"}) from error
+        except VisionDisabled as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_DISABLED"}) from error
+        except GatewayUnavailable as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_UNAVAILABLE"}) from error
+        consume_ticket = getattr(services.gateway, "consume_vision_ticket", None)
+        try:
+            if consume_ticket is not None and (
+                ticket is None or not await consume_ticket(ticket, principal.subject)
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail={"code": "CALIBRATION_TICKET_INVALID"},
+                )
+        except GatewayUnavailable as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_UNAVAILABLE"}) from error
         decoded = await decode_frames(frames)
         token, background = await services.calibration.calibrate(decoded, principal.subject)
         return CalibrationResponse(
@@ -233,43 +332,70 @@ def create_app(services: Services) -> FastAPI:
 
     @app.post("/v1/validate", response_model=VisionVerdict)
     async def validate(
+        request: Request,
         turn_id: Annotated[str, Form(alias="turnId")],
         sequence_no: Annotated[int, Form(alias="sequenceNo", ge=1)],
         calibration_token: Annotated[str, Form(alias="calibrationToken", min_length=16)],
         frames: Annotated[list[UploadFile], File()],
         authorization: Annotated[str | None, Header()] = None,
+        device_id: Annotated[str | None, Header(alias="X-Camera-Quest-Device")] = None,
     ) -> VisionVerdict:
         principal = await authenticate(authorization)
         try:
             calibration = services.signer.verify(calibration_token, principal.subject)
-            services.rate_limiter.check(turn_id, sequence_no)
         except InvalidCalibrationToken as error:
             raise HTTPException(status_code=422, detail={"code": "INVALID_FRAME"}) from error
+
+        try:
+            validation_limiter.check(principal.subject)
+            await distributed_guard(
+                "validate",
+                principal,
+                client_ip(request.headers, request.client.host if request.client else None),
+                device_id,
+            )
+        except RateLimitExceeded as error:
+            raise HTTPException(status_code=429, detail={"code": "RATE_LIMITED"}) from error
+        except GatewayUnavailable as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_UNAVAILABLE"}) from error
+
+        # Authorize the turn before attacker-controlled ids reach the in-memory
+        # replay map or any frame decoding/model work.
+        try:
+            turn = await services.gateway.get_active_turn(turn_id, principal.subject)
+        except TurnUnavailable as error:
+            raise HTTPException(status_code=409, detail={"code": "TURN_EXPIRED"}) from error
+        except GatewayUnavailable as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_UNAVAILABLE"}) from error
+
+        try:
+            await ensure_vision_enabled()
+        except VisionDisabled:
+            try:
+                await services.gateway.abort_turn(turn.id, "vision_disabled")
+            except GatewayUnavailable as error:
+                raise HTTPException(
+                    status_code=503,
+                    detail={"code": "VISION_UNAVAILABLE"},
+                ) from error
+            return VisionVerdict(
+                decision="system_error",
+                progress=0,
+                detections=[],
+                note="VISION_DISABLED",
+            )
+        except GatewayUnavailable as error:
+            raise HTTPException(status_code=503, detail={"code": "VISION_UNAVAILABLE"}) from error
+
+        try:
+            services.rate_limiter.check(turn.id, sequence_no)
         except SequenceReplay as error:
             raise HTTPException(status_code=409, detail={"code": "SEQUENCE_REPLAY"}) from error
         except RateLimitExceeded as error:
             raise HTTPException(status_code=429, detail={"code": "RATE_LIMITED"}) from error
 
-        # Frame decoding and the authoritative turn lookup are independent;
-        # overlapping them removes one serial hop from every scan. The gateway
-        # result keeps precedence so outages remain retryable even for a bad frame.
-        decoded_result, turn_result = await asyncio.gather(
-            decode_frames(frames),
-            services.gateway.get_active_turn(turn_id, principal.subject),
-            return_exceptions=True,
-        )
         try:
-            if isinstance(turn_result, BaseException):
-                raise turn_result
-            if isinstance(decoded_result, BaseException):
-                raise decoded_result
-        except TurnUnavailable as error:
-            raise HTTPException(status_code=409, detail={"code": "TURN_EXPIRED"}) from error
-        except GatewayUnavailable as error:
-            raise HTTPException(status_code=503, detail={"code": "VISION_UNAVAILABLE"}) from error
-        decoded = decoded_result
-        turn = turn_result
-        try:
+            decoded = await decode_frames(frames)
             return await evaluate_turn(turn, sequence_no, decoded, calibration)
         except TurnUnavailable as error:
             raise HTTPException(status_code=409, detail={"code": "TURN_EXPIRED"}) from error
@@ -290,6 +416,12 @@ def create_app(services: Services) -> FastAPI:
             )
             principal = await services.jwt.verify(auth.access_token)
             calibration = services.signer.verify(auth.calibration_token, principal.subject)
+            await distributed_guard(
+                "stream",
+                principal,
+                client_ip(websocket.headers, websocket.client.host if websocket.client else None),
+                auth.device_id,
+            )
             turn = await services.gateway.get_active_turn(auth.turn_id, principal.subject)
         except (ValidationError, InvalidCalibrationToken):
             await send_stream_error(websocket, "INVALID_FRAME", close=True)
@@ -302,6 +434,9 @@ def create_app(services: Services) -> FastAPI:
             return
         except GatewayUnavailable:
             await send_stream_error(websocket, "VISION_UNAVAILABLE", close=True)
+            return
+        except RateLimitExceeded:
+            await send_stream_error(websocket, "RATE_LIMITED", close=True)
             return
         except (TimeoutError, WebSocketDisconnect):
             with suppress(Exception):
@@ -320,6 +455,15 @@ def create_app(services: Services) -> FastAPI:
                         await asyncio.wait_for(websocket.receive_text(), timeout=5)
                     )
                     services.rate_limiter.check(turn.id, batch.sequence_no)
+                    await distributed_guard(
+                        "validate",
+                        principal,
+                        client_ip(
+                            websocket.headers,
+                            websocket.client.host if websocket.client else None,
+                        ),
+                        auth.device_id,
+                    )
                 except ValidationError:
                     await send_stream_error(websocket, "INVALID_FRAME", close=True)
                     return
@@ -328,6 +472,34 @@ def create_app(services: Services) -> FastAPI:
                     return
                 except RateLimitExceeded:
                     await send_stream_error(websocket, "RATE_LIMITED", close=True)
+                    return
+                except GatewayUnavailable:
+                    await send_stream_error(websocket, "VISION_UNAVAILABLE", close=True)
+                    return
+
+                try:
+                    await ensure_vision_enabled()
+                except VisionDisabled:
+                    try:
+                        await services.gateway.abort_turn(turn.id, "vision_disabled")
+                    except GatewayUnavailable:
+                        await send_stream_error(websocket, "VISION_UNAVAILABLE", close=True)
+                        return
+                    await websocket.send_json(
+                        {
+                            "type": "verdict",
+                            "verdict": VisionVerdict(
+                                decision="system_error",
+                                progress=0,
+                                detections=[],
+                                note="VISION_DISABLED",
+                            ).model_dump(mode="json", by_alias=True),
+                        }
+                    )
+                    await websocket.close(code=1011)
+                    return
+                except GatewayUnavailable:
+                    await send_stream_error(websocket, "VISION_UNAVAILABLE", close=True)
                     return
 
                 if turn.deadline_at <= datetime.now(UTC):

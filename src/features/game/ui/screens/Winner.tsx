@@ -24,6 +24,7 @@ export function Winner() {
   const newGame = useGame((s) => s.newGame);
   const busy = useGame((s) => s.busy);
   const errorCode = useGame((s) => s.errorCode);
+  const lobby = useGame((s) => s.lobby);
 
   const rows = rankWithMovement(players, snapshot);
   const champs = winners(players);
@@ -36,6 +37,10 @@ export function Winner() {
       : champs.length > 1
         ? mn.winner.tie
         : mn.winner.title(champ.name);
+  const rematchStatus =
+    lobby?.status === "completed"
+      ? mn.winner.rematchStatus(lobby.rematchReadyCount, lobby.rematchPlayerCount)
+      : null;
 
   return (
     <Screen className="justify-between">
@@ -107,9 +112,14 @@ export function Winner() {
             </ol>
 
             <div className="mt-5 hidden shrink-0 flex-col gap-2.5 border-t border-line/45 pt-5 lg:flex">
+              {rematchStatus && (
+                <p role="status" className="text-center text-sm font-semibold text-ink-3">
+                  {rematchStatus}
+                </p>
+              )}
               <GameButton
-                onClick={playAgain}
-                disabled={busy}
+                onClick={() => void playAgain()}
+                disabled={busy || lobby?.selfRematchReady}
                 icon={<RotateCcw className="size-6" strokeWidth={2.8} />}
               >
                 {mn.winner.again}
@@ -117,7 +127,7 @@ export function Winner() {
               <GameButton
                 variant="ghost"
                 size="md"
-                onClick={newGame}
+                onClick={() => void newGame()}
                 disabled={busy}
                 icon={<Users className="size-5" strokeWidth={2.6} />}
               >
@@ -138,9 +148,14 @@ export function Winner() {
               Шинэ тоглолт үүсгэж чадсангүй. Дахин оролдоно уу.
             </p>
           )}
+          {rematchStatus && (
+            <p role="status" className="text-center text-sm font-semibold text-ink-3">
+              {rematchStatus}
+            </p>
+          )}
           <GameButton
-            onClick={playAgain}
-            disabled={busy}
+            onClick={() => void playAgain()}
+            disabled={busy || lobby?.selfRematchReady}
             icon={<RotateCcw className="size-6" strokeWidth={2.8} />}
           >
             {mn.winner.again}
@@ -148,7 +163,7 @@ export function Winner() {
           <GameButton
             variant="ghost"
             size="md"
-            onClick={newGame}
+            onClick={() => void newGame()}
             disabled={busy}
             icon={<Users className="size-5" strokeWidth={2.6} />}
           >

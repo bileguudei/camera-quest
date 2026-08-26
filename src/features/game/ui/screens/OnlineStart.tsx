@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, KeyRound, Users } from "lucide-react";
+import { ArrowLeft, KeyRound, ScanFace, Search, Users } from "lucide-react";
 import { useState } from "react";
 import { EnvironmentPicker } from "@/features/game/ui/components/EnvironmentPicker";
 import { GameButton } from "@/features/game/ui/components/GameButton";
@@ -9,6 +9,7 @@ import { mn } from "@/content/mn";
 import { useGame } from "@/features/game/application/useGame";
 import { handoffErrorMessage } from "@/features/game/domain/errorMessages";
 import { takePendingInviteCode } from "@/features/game/application/inviteLink";
+import type { GameKind } from "@/features/game/domain/types";
 
 /** Host a table or join one with a six-character code. */
 export function OnlineStart() {
@@ -20,6 +21,7 @@ export function OnlineStart() {
   const backendMode = useGame((state) => state.backendMode);
 
   const [name, setName] = useState("");
+  const [gameKind, setGameKind] = useState<GameKind>("mimic_rush");
   // Arriving on an invite link, the code is already known — the friend only
   // has to say who they are.
   const [code, setCode] = useState(takePendingInviteCode);
@@ -78,11 +80,53 @@ export function OnlineStart() {
             />
           </label>
 
-          {/* Only the host chooses; a joining phone inherits the table's room. */}
-          <EnvironmentPicker />
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Тоглоомын төрөл">
+            {([
+              {
+                value: "mimic_rush" as const,
+                title: "Mimic Rush",
+                hint: "Face Bomb · 3 life",
+                Icon: ScanFace,
+              },
+              {
+                value: "camera_quest" as const,
+                title: "Camera Quest",
+                hint: "Зүйл хайх · 5 раунд",
+                Icon: Search,
+              },
+            ]).map(({ value, title, hint, Icon }) => {
+              const selected = gameKind === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setGameKind(value)}
+                  className={[
+                    "rounded-g3 border p-3 text-left transition-colors",
+                    selected
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-line bg-surface text-ink-2",
+                  ].join(" ")}
+                >
+                  <Icon className="size-5" strokeWidth={2.3} />
+                  <span className="mt-2 block font-display text-sm font-black text-ink">
+                    {title}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] font-bold text-ink-3">
+                    {hint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Only Camera Quest needs an object-pool environment. */}
+          {gameKind === "camera_quest" && <EnvironmentPicker />}
 
           <GameButton
-            onClick={() => void host(trimmedName)}
+            onClick={() => void host(trimmedName, gameKind)}
             disabled={!canHost || unsupported}
             icon={<Users className="size-6" strokeWidth={2.6} />}
           >

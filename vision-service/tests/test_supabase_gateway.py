@@ -115,3 +115,27 @@ async def test_another_member_cannot_validate_a_turn_it_does_not_sit_at() -> Non
         await gateway.get_active_turn("turn-id", "host-who-is-not-the-seat")
 
     await gateway._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_security_rpcs_use_service_role_postgrest_contracts() -> None:
+    seen: list[tuple[str, object]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, request.content.decode()))
+        if request.url.path.endswith("vision_service_state"):
+            return httpx.Response(200, json={"enabled": True}, request=request)
+        return httpx.Response(200, json=True, request=request)
+
+    gateway = _mock_gateway(handler)
+
+    assert await gateway.claim_vision_budget("validate:subject:0123456789", 10, 60)
+    assert await gateway.consume_vision_ticket("ticket-id", "owner-id")
+    assert await gateway.vision_service_enabled()
+
+    assert [path for path, _ in seen] == [
+        "/rest/v1/rpc/claim_vision_budget",
+        "/rest/v1/rpc/consume_vision_ticket",
+        "/rest/v1/rpc/vision_service_state",
+    ]
+    await gateway._client.aclose()

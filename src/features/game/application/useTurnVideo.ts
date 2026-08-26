@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getGameRepository } from "../infrastructure/createGameRepository";
 import type { TurnChannel, TurnChannelHandlers } from "../infrastructure/gameRepository";
 import type { TurnPreviewFrame, TurnSignal } from "../domain/types";
+import { flushIceCandidates, queueOrApplyIceCandidate } from "./webrtcIceQueue";
+import { WatcherHeartbeatRegistry } from "./realtimeSignalQueue";
 
 /**
  * Public STUN only. A direct peer connection costs nothing, and the phones that
@@ -26,6 +28,7 @@ export const TURN_VIDEO_ENCODING = {
 } satisfies RTCRtpEncodingParameters;
 /** A watcher re-announces itself so a publisher that started later still sees it. */
 const WATCH_PING_MS = 2_000;
+const WATCH_EXPIRE_MS = 6_500;
 /** Nothing negotiated by then: keep showing frames rather than a black box. */
 const CONNECT_TIMEOUT_MS = 6_000;
 
@@ -77,8 +80,9 @@ export function useTurnVideoPublisher({
 }: PublisherOptions): { channel: TurnChannel | null; watchersOnVideo: number } {
   const clientId = useMemo(() => newClientId(), []);
   const peers = useRef(new Map<string, RTCPeerConnection>());
+  const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const viaVideo = useRef(new Set<string>());
-  const watchers = useRef(new Set<string>());
+  const watchers = useRef(new WatcherHeartbeatRegistry());
   const [watchersOnVideo, setWatchersOnVideo] = useState(0);
   const channelRef = useRef<TurnChannel | null>(null);
   const streamRef = useRef(stream);
@@ -92,8 +96,9 @@ export function useTurnVideoPublisher({
   const syncTransport = useCallback(() => {
     setWatchersOnVideo(viaVideo.current.size);
     // Frames stay on while anyone is still watching over the fallback path.
-    const stragglers = [...watchers.current].some((peer) => !viaVideo.current.has(peer));
-    needFrames.current(watchers.current.size === 0 || stragglers);
+    const watcherIds = watchers.current.ids();
+    const stragglers = watcherIds.some((peer) => !viaVideo.current.has(peer));
+    needFrames.current(watcherIds.length === 0 || stragglers);
   }, []);
 
   const connect = useCallback(
@@ -104,6 +109,7 @@ export function useTurnVideoPublisher({
 
       const peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       peers.current.set(watcher, peer);
+      if (!pendingIce.current.has(watcher)) pendingIce.current.set(watcher, []);
 
       for (const track of media.getVideoTracks()) {
         // Camera Quest contains small objects and recognition boxes, so browsers
@@ -135,6 +141,7 @@ export function useTurnVideoPublisher({
       peer.onconnectionstatechange = () => {
         if (peer.connectionState === "failed" || peer.connectionState === "closed") {
           peers.current.delete(watcher);
+          pendingIce.current.delete(watcher);
           viaVideo.current.delete(watcher);
           peer.close();
           syncTransport();
@@ -152,19 +159,24 @@ export function useTurnVideoPublisher({
     (signal: TurnSignal) => {
       if (!enabled) return;
       if (signal.kind === "watch") {
-        watchers.current.add(signal.from);
+        watchers.current.touch(signal.from);
         syncTransport();
         void connect(signal.from);
         return;
       }
       if (signal.to !== clientId) return;
       const peer = peers.current.get(signal.from);
-      if (!peer) return;
 
       if (signal.kind === "answer" && signal.sdp) {
-        void peer.setRemoteDescription({ type: "answer", sdp: signal.sdp }).catch(() => undefined);
+        if (!peer) return;
+        void (async () => {
+          await peer.setRemoteDescription({ type: "answer", sdp: signal.sdp });
+          await flushIceCandidates(peer, pendingIce.current.get(signal.from) ?? []);
+        })().catch(() => undefined);
       } else if (signal.kind === "ice" && signal.candidate) {
-        void peer.addIceCandidate(signal.candidate).catch(() => undefined);
+        const pending = pendingIce.current.get(signal.from) ?? [];
+        pendingIce.current.set(signal.from, pending);
+        void queueOrApplyIceCandidate(peer ?? null, pending, signal.candidate);
       } else if (signal.kind === "transport") {
         if (signal.transport === "webrtc") viaVideo.current.add(signal.from);
         else viaVideo.current.delete(signal.from);
@@ -185,13 +197,29 @@ export function useTurnVideoPublisher({
     const open = peers.current;
     const connected = viaVideo.current;
     const seen = watchers.current;
+    const queuedCandidates = pendingIce.current;
     return () => {
       open.forEach((peer) => peer.close());
       open.clear();
       connected.clear();
       seen.clear();
+      queuedCandidates.clear();
     };
   }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = window.setInterval(() => {
+      for (const watcher of watchers.current.expire(Date.now() - WATCH_EXPIRE_MS)) {
+        peers.current.get(watcher)?.close();
+        peers.current.delete(watcher);
+        pendingIce.current.delete(watcher);
+        viaVideo.current.delete(watcher);
+      }
+      syncTransport();
+    }, WATCH_PING_MS);
+    return () => window.clearInterval(timer);
+  }, [enabled, syncTransport]);
 
   return { channel, watchersOnVideo };
 }
@@ -211,6 +239,8 @@ export function useTurnVideoViewer({ gameId, enabled, onFrame }: ViewerOptions):
   const clientId = useMemo(() => newClientId(), []);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
+  const peerFromRef = useRef<string | null>(null);
+  const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const channelRef = useRef<TurnChannel | null>(null);
   const frameHandler = useRef(onFrame);
 
@@ -227,6 +257,7 @@ export function useTurnVideoViewer({ gameId, enabled, onFrame }: ViewerOptions):
         peerRef.current?.close();
         const peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
         peerRef.current = peer;
+        peerFromRef.current = signal.from;
 
         peer.ontrack = (event) => {
           setVideoStream(event.streams[0] ?? null);
@@ -264,6 +295,7 @@ export function useTurnVideoViewer({ gameId, enabled, onFrame }: ViewerOptions):
         };
 
         await peer.setRemoteDescription({ type: "offer", sdp: signal.sdp });
+        await flushIceCandidates(peer, pendingIce.current.get(signal.from) ?? []);
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
         channel.publishSignal({
@@ -276,7 +308,10 @@ export function useTurnVideoViewer({ gameId, enabled, onFrame }: ViewerOptions):
       }
 
       if (signal.kind === "ice" && signal.candidate) {
-        await peerRef.current?.addIceCandidate(signal.candidate).catch(() => undefined);
+        const pending = pendingIce.current.get(signal.from) ?? [];
+        pendingIce.current.set(signal.from, pending);
+        const peer = peerFromRef.current === signal.from ? peerRef.current : null;
+        await queueOrApplyIceCandidate(peer, pending, signal.candidate);
       }
     },
     [clientId],
@@ -311,14 +346,19 @@ export function useTurnVideoViewer({ gameId, enabled, onFrame }: ViewerOptions):
     if (enabled) return;
     const peer = peerRef.current;
     peerRef.current = null;
+    peerFromRef.current = null;
+    pendingIce.current.clear();
     peer?.close();
   }, [enabled]);
 
   useEffect(() => {
     const peer = peerRef;
+    const queuedCandidates = pendingIce.current;
     return () => {
       peer.current?.close();
       peer.current = null;
+      peerFromRef.current = null;
+      queuedCandidates.clear();
     };
   }, []);
 

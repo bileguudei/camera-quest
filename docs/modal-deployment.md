@@ -125,7 +125,11 @@ Staging cost guard нь нэг төхөөрөмж дээр 1–6 хүн ээлж
 - GPU хэрэглэхгүй үед `min_containers=0` тул scale-to-zero хийнэ.
 - Сүүлийн request-ээс 90 секундийн дараа idle GPU унтарна.
 - Нэг GPU container гурван богино control request-ийг зэрэг хүлээн авч чадна.
-- Нэг browser-ийн амжилттай warmup-ийг 60 секунд cache хийж давхар request гаргахгүй.
+- Нэг browser болон GPU container-ийн амжилттай warmup-ийг 60 секунд cache хийж, зэрэг ирсэн
+  warmup request-үүдийг нэг ажил болгон нийлүүлнэ.
+- Authenticated subject бүр container тутамд warmup 3/мин, calibration 6/мин, validation
+  180/мин quota-тай. Энэ нь санамсаргүй turn ID-аар replay map өсгөхөөс өмнө хүсэлтийг
+  хязгаарлана; public traffic олон region/container дамжих үед distributed quota нэмнэ.
 - GPU container-ийн дээд хязгаар 3, нэг container 3 input авдаг тул зэрэг 9 хүртэл turn
   боловсруулна. Илүү олон төхөөрөмж зэрэг тоглох public launch-аас өмнө энэ хязгаарыг load
   test-ийн үр дүнд тулгуурлан нэмнэ.

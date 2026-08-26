@@ -22,6 +22,7 @@ __pycache__/
 /.next/
 /.next-e2e/
 /out/
+/public/mediapipe/wasm/
 
 # production
 /build

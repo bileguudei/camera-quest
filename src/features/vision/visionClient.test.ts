@@ -153,6 +153,7 @@ describe("turn vision stream", () => {
     expect(JSON.parse(textMessages[0]!)).toMatchObject({
       type: "authenticate",
       accessToken: "access-token",
+      deviceId: expect.any(String),
     });
     expect(JSON.parse(textMessages[1]!)).toEqual({ type: "batch", sequenceNo: 41 });
     expect(JSON.parse(textMessages[2]!)).toEqual({ type: "batch", sequenceNo: 42 });

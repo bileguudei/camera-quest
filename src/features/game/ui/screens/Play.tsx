@@ -2,7 +2,7 @@
 
 import { Check, ScanLine, X, XCircle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BoundingBox } from "@/features/game/ui/components/BoundingBox";
 import { CameraFrame } from "@/features/game/ui/components/CameraFrame";
 import { ChallengeCard } from "@/features/game/ui/components/ChallengeCard";
@@ -159,6 +159,15 @@ export function Play() {
     progress: vision.lock,
     detections: vision.detections,
   });
+  // A turn that wants two things at once ticks each one off as the scan
+  // confirms it, so the player can see which half is still missing.
+  const confirmed = useMemo(
+    () =>
+      vision.detections
+        .filter((detection) => detection.isTarget)
+        .map((detection) => detection.className),
+    [vision.detections],
+  );
   const wrong = useRejection(vision.rejectedAt ?? 0, vision.note ?? "", running);
   const scanning = vision.status === "ready" && running;
 
@@ -235,7 +244,7 @@ export function Play() {
             }
           />
 
-          <ChallengeCard challenge={challenge} />
+          <ChallengeCard challenge={challenge} confirmed={confirmed} />
 
           {broadcasting && (
             <p className="mx-auto rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-warn backdrop-blur-[3px]">

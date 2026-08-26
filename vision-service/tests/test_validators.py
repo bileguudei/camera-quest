@@ -35,6 +35,28 @@ class FakeDetector:
         ]
 
 
+class FakeSceneDetector:
+    """Each frame is described as a list of (label, confidence) pairs."""
+
+    def __init__(self, scenes: list[list[tuple[str, float]]]) -> None:
+        self.scenes = scenes
+
+    async def detect_batch(self, frames: list[np.ndarray]) -> list[list[Detection]]:
+        del frames
+        return [
+            [
+                Detection(
+                    label=label,
+                    confidence=confidence,
+                    box=Box(x=0.05 + 0.3 * index, y=0.2, w=0.25, h=0.3),
+                    target=False,
+                )
+                for index, (label, confidence) in enumerate(scene)
+            ]
+            for scene in self.scenes
+        ]
+
+
 class FakeFallback:
     async def verify(self, frame: np.ndarray, target_class: str) -> tuple[bool, float]:
         del frame, target_class
@@ -271,6 +293,134 @@ async def test_smile_requires_four_frames_above_delta_and_absolute() -> None:
     assert result.passed
     assert analyzer.calls == 4
 
+
+
+def _condition_quest(classes: list[str]) -> QuestConfig:
+    return QuestConfig(
+        id="q",
+        key="combo",
+        kind="object",
+        target_class=classes[0],
+        validator_config={
+            "targetClasses": classes,
+            "confidence": 0.5,
+            "borderlineMin": 0.45,
+            "consensus": 2,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_condition_passes_when_both_things_share_two_frames() -> None:
+    frames = [np.zeros((512, 512, 3), dtype=np.uint8) for _ in range(5)]
+    detector = FakeSceneDetector(
+        [
+            [("book", 0.8), ("cup", 0.7)],
+            [("book", 0.79), ("cup", 0.68)],
+            [("book", 0.8)],
+            [("book", 0.8)],
+            [("book", 0.8)],
+        ]
+    )
+
+    result = await ObjectValidator(detector).validate(
+        frames, _condition_quest(["book", "cup"]), CalibrationClaims(sub="x", exp=9_999_999_999)
+    )
+
+    assert result.passed
+    assert result.progress == 1.0
+    assert {detection.label for detection in result.detections if detection.target} == {
+        "book",
+        "cup",
+    }
+
+
+@pytest.mark.asyncio
+async def test_condition_rejects_one_thing_at_a_time() -> None:
+    frames = [np.zeros((512, 512, 3), dtype=np.uint8) for _ in range(5)]
+    detector = FakeSceneDetector(
+        [
+            [("book", 0.9)],
+            [("book", 0.9)],
+            [("cup", 0.9)],
+            [("cup", 0.9)],
+            [("book", 0.9)],
+        ]
+    )
+
+    result = await ObjectValidator(detector).validate(
+        frames, _condition_quest(["book", "cup"]), CalibrationClaims(sub="x", exp=9_999_999_999)
+    )
+
+    assert not result.passed
+    # Half of what the turn wants is in shot, and it still has to be held,
+    # so the lock ring moves a quarter of the way rather than not at all.
+    assert result.progress == pytest.approx(0.25)
+    # The frame on screen holds one of the two, and only that one reads as met.
+    assert {detection.label for detection in result.detections if detection.target} == {"book"}
+
+
+@pytest.mark.asyncio
+async def test_condition_never_uses_the_single_object_fallback() -> None:
+    frames = [np.zeros((512, 512, 3), dtype=np.uint8) for _ in range(5)]
+    detector = FakeSceneDetector([[("book", 0.47), ("cup", 0.47)] for _ in range(5)])
+
+    result = await ObjectValidator(detector, FakeFallback()).validate(
+        frames, _condition_quest(["book", "cup"]), CalibrationClaims(sub="x", exp=9_999_999_999)
+    )
+
+    assert not result.passed
+    assert result.note is None
+
+
+@pytest.mark.asyncio
+async def test_repeated_class_asks_for_two_separate_objects() -> None:
+    frames = [np.zeros((512, 512, 3), dtype=np.uint8) for _ in range(5)]
+    quest = _condition_quest(["bottle", "bottle"])
+
+    one = await ObjectValidator(
+        FakeSceneDetector([[("bottle", 0.9)] for _ in range(5)])
+    ).validate(frames, quest, CalibrationClaims(sub="x", exp=9_999_999_999))
+    two = await ObjectValidator(
+        FakeSceneDetector([[("bottle", 0.9), ("bottle", 0.85)] for _ in range(5)])
+    ).validate(frames, quest, CalibrationClaims(sub="x", exp=9_999_999_999))
+
+    assert not one.passed
+    assert two.passed
+
+
+@pytest.mark.asyncio
+async def test_one_object_seen_twice_by_the_detector_is_counted_once() -> None:
+    frames = [np.zeros((512, 512, 3), dtype=np.uint8) for _ in range(5)]
+
+    class DoubleBoxedDetector:
+        async def detect_batch(self, frames: list[np.ndarray]) -> list[list[Detection]]:
+            del frames
+            return [
+                [
+                    Detection(
+                        label="bottle",
+                        confidence=0.9,
+                        box=Box(x=0.2, y=0.2, w=0.4, h=0.4),
+                        target=False,
+                    ),
+                    Detection(
+                        label="bottle",
+                        confidence=0.86,
+                        box=Box(x=0.21, y=0.21, w=0.4, h=0.4),
+                        target=False,
+                    ),
+                ]
+                for _ in range(5)
+            ]
+
+    result = await ObjectValidator(DoubleBoxedDetector()).validate(
+        frames,
+        _condition_quest(["bottle", "bottle"]),
+        CalibrationClaims(sub="x", exp=9_999_999_999),
+    )
+
+    assert not result.passed
 
 def test_registry_rejects_unknown_kind() -> None:
     registry = ValidatorRegistry([ColorValidator()])

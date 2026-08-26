@@ -12,6 +12,10 @@
 
 ## Live camera matrix
 
+Record device-by-device evidence in
+[`docs/live-device-release-matrix.md`](./live-device-release-matrix.md). The
+summary below does not replace that blocking matrix.
+
 - [ ] Chrome, Safari, Edge
 - [ ] 390×844, 768×1024, 1440×900
 - [ ] Bright, normal, low light
@@ -54,3 +58,21 @@ NEXT_PUBLIC_DEV_CONTROLS_ENABLED=false
 ```
 
 `SEMANTIC_QUESTS_ENABLED` is reserved and must remain false in v1. If Modal errors spike, block new games without timing out active players. If Gemini errors spike, disable only the fallback.
+
+## Vision remote kill switch
+
+The switch is read dynamically by every Modal container (cached for no more
+than five seconds). Disable it from the Supabase SQL editor or an audited admin
+runbook; the tables and RPCs are not accessible to browser roles.
+
+```sql
+update public.vision_service_controls
+set enabled = false,
+    reason = 'incident-id or release drill',
+    updated_at = clock_timestamp()
+where service = 'vision';
+```
+
+Re-enable with the same statement using `enabled = true` and a reason. During
+an active turn, the vision service atomically aborts the turn before returning
+the system-error verdict, so the player receives a penalty-free retry.

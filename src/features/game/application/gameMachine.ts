@@ -121,7 +121,17 @@ export const gameMachine = setup({
     hasMoreRounds: ({ context }) => context.roundIndex < TOTAL_ROUNDS - 1,
     isOnline: ({ context }) => context.lobby !== null,
     onlineFinished: ({ context }) => context.lobby?.status === "completed",
+    rematchCreated: ({ context, event }) =>
+      event.type === "LOBBY_UPDATED" &&
+      context.lobby !== null &&
+      event.lobby.gameId !== context.lobby.gameId &&
+      event.lobby.status === "active" &&
+      event.lobby.lobbyOpen,
     lobbyStarted: ({ event }) => event.type === "LOBBY_UPDATED" && !event.lobby.lobbyOpen,
+    mimicLobbyStarted: ({ event }) =>
+      event.type === "LOBBY_UPDATED" &&
+      !event.lobby.lobbyOpen &&
+      event.lobby.gameKind === "mimic_rush",
     gameFinished: ({ event }) =>
       event.type === "LOBBY_UPDATED" && event.lobby.status !== "active",
     pointerMoved: ({ context, event }) =>
@@ -255,6 +265,7 @@ export const gameMachine = setup({
     applyLobby: assign(({ context, event }) => {
       if (event.type !== "LOBBY_UPDATED") return {};
       const lobby = event.lobby;
+      const matchJustStarted = context.lobby?.lobbyOpen === true && !lobby.lobbyOpen;
       // The board only needs the roster fields; ready/left/isSelf stay on `lobby`.
       const players: Player[] = lobby.players.map((entry) => ({
         id: entry.id,
@@ -280,7 +291,18 @@ export const gameMachine = setup({
         turnIndex: seated < 0 ? 0 : seated,
         // Round deltas are measured from the scores the round opened with.
         roundSnapshot:
-          roundIndex === context.roundIndex ? context.roundSnapshot : scoreSnapshot(players),
+          matchJustStarted || roundIndex !== context.roundIndex
+            ? scoreSnapshot(players)
+            : context.roundSnapshot,
+        ...(matchJustStarted
+          ? {
+              preparedTurn: null,
+              calibrationToken: null,
+              deadlineAtMs: null,
+              lastOutcome: null,
+              errorCode: null,
+            }
+          : {}),
         busy: false,
       };
     }),
@@ -343,11 +365,31 @@ export const gameMachine = setup({
       on: {
         START_GAME_PENDING: { actions: "markBusy" },
         LOBBY_UPDATED: [
-          // The host closing the lobby is what sends every phone to its own
-          // camera check; from there the flow is the single-device one.
-          { guard: "lobbyStarted", target: "cameraCheck", actions: "applyLobby" },
+          {
+            guard: "mimicLobbyStarted",
+            target: "mimicBattle",
+            actions: "applyLobby",
+          },
+          // The host's authoritative start event moves every phone into the
+          // same round. CameraProvider opens each camera during this intro;
+          // online players never need a second, local-only Start press.
+          { guard: "lobbyStarted", target: "roundIntro", actions: "applyLobby" },
           { actions: "applyLobby" },
         ],
+        GAME_FAILED: { actions: "setFailure" },
+      },
+    },
+    mimicBattle: {
+      on: {
+        LOBBY_UPDATED: [
+          {
+            guard: "rematchCreated",
+            target: "lobby",
+            actions: ["resetMatch", "applyLobby"],
+          },
+          { actions: "applyLobby" },
+        ],
+        PLAY_AGAIN: { actions: "markBusy" },
         GAME_FAILED: { actions: "setFailure" },
       },
     },
@@ -370,12 +412,14 @@ export const gameMachine = setup({
       on: {
         PLAYER_READY: "calibrating",
         LOBBY_UPDATED: [
+          { guard: "gameFinished", target: "winner", actions: "applyLobby" },
+          { guard: "roundAdvanced", target: "roundResult", actions: "applyLobby" },
+          { guard: "pointerMoved", target: "playerHandoff", actions: "applyLobby" },
           {
             guard: "spectatedTurnResolved",
             target: "turnResult",
             actions: ["applyLobby", "applySpectatedOutcome"],
           },
-          { guard: "gameFinished", target: "winner", actions: "applyLobby" },
           { actions: "applyLobby" },
         ],
       },
@@ -431,11 +475,25 @@ export const gameMachine = setup({
     },
     winner: {
       on: {
-        PLAY_AGAIN: { target: "roundIntro", actions: "resetMatch" },
+        PLAY_AGAIN: [
+          {
+            guard: "isOnline",
+            actions: "markBusy",
+          },
+          { target: "roundIntro", actions: "resetMatch" },
+        ],
+        LOBBY_UPDATED: [
+          {
+            guard: "rematchCreated",
+            target: "lobby",
+            actions: ["resetMatch", "applyLobby"],
+          },
+          { actions: "applyLobby" },
+        ],
         START_GAME_PENDING: { actions: "markBusy" },
         START_GAME: { target: "roundIntro", actions: "startSession" },
         GAME_FAILED: { actions: "setFailure" },
-        NEW_GAME: { target: "setup", actions: "resetMatch" },
+        NEW_GAME: { target: "setup", actions: ["resetMatch", "leaveLobby"] },
       },
     },
   },

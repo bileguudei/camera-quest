@@ -14,6 +14,8 @@ from app.models.contracts import VisionOutcome
 from app.models.supabase_gateway import GatewayUnavailable
 from app.models.turn import ActiveTurn, CalibrationClaims, QuestConfig
 from app.security.jwt_verifier import Principal
+from app.security.rate_limit import RateLimitExceeded
+from app.security.vision_control import VisionDisabled
 from app.validators.base import Frame, ValidationResult
 
 
@@ -98,6 +100,37 @@ async def test_warmup_primes_model_and_supabase_connections() -> None:
 
 
 @pytest.mark.asyncio
+async def test_warmup_coalesces_repeated_requests_inside_the_cache_window() -> None:
+    detector = FakeDetector()
+    gateway = FakeGateway()
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=detector,
+        gateway=gateway,
+    )
+    app = create_app(cast(Any, services))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post("/v1/warmup", headers={"Authorization": "Bearer one"})
+        second = await client.post("/v1/warmup", headers={"Authorization": "Bearer two"})
+
+    assert first.status_code == 204
+    assert second.status_code == 204
+    assert detector.warm_calls == 1
+    assert gateway.warm_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_warmup_maps_gpu_capacity_failure_to_retryable_service_error() -> None:
     class CapacityLimitedDetector:
         async def warm(self) -> None:
@@ -128,6 +161,124 @@ async def test_warmup_maps_gpu_capacity_failure_to_retryable_service_error() -> 
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "VISION_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
+async def test_warmup_rate_limit_runs_before_gpu_work() -> None:
+    class RejectingLimiter:
+        def check(self, subject: str) -> None:
+            assert subject == "owner:valid"
+            raise RateLimitExceeded
+
+    detector = FakeDetector()
+    gateway = FakeGateway()
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=detector,
+        gateway=gateway,
+        warmup_limiter=RejectingLimiter(),
+    )
+    app = create_app(cast(Any, services))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/warmup",
+            headers={"Authorization": "Bearer valid"},
+        )
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "RATE_LIMITED"
+    assert detector.warm_calls == 0
+    assert gateway.warm_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_distributed_quota_runs_before_gpu_work() -> None:
+    class RejectingGuard:
+        async def check(self, action: str, subject: str, ip: str, device: str) -> None:
+            assert (action, subject, device) == ("warmup", "owner:valid", "device-0001")
+            assert ip
+            raise RateLimitExceeded
+
+    detector = FakeDetector()
+    gateway = FakeGateway()
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=detector,
+        gateway=gateway,
+        abuse_guard=RejectingGuard(),
+    )
+    app = create_app(cast(Any, services))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/warmup",
+            headers={
+                "Authorization": "Bearer valid",
+                "X-Camera-Quest-Device": "device-0001",
+            },
+        )
+
+    assert response.status_code == 429
+    assert detector.warm_calls == 0
+    assert gateway.warm_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_remote_kill_switch_runs_before_gpu_work() -> None:
+    class DisabledControl:
+        async def ensure_enabled(self) -> None:
+            raise VisionDisabled
+
+    detector = FakeDetector()
+    gateway = FakeGateway()
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=detector,
+        gateway=gateway,
+        vision_control=DisabledControl(),
+    )
+    app = create_app(cast(Any, services))
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/warmup", headers={"Authorization": "Bearer valid"}
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "VISION_DISABLED"
+    assert detector.warm_calls == 0
+    assert gateway.warm_calls == 0
 
 
 @pytest.mark.asyncio
@@ -163,18 +314,11 @@ async def test_body_limit_runs_before_frame_parsing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_validate_maps_supabase_outage_to_retryable_service_error() -> None:
-    class FakeSigner:
-        def verify(self, token: str, subject: str) -> object:
-            return object()
-
-    class FakeRateLimiter:
-        def check(self, turn_id: str, sequence_no: int) -> None:
-            return None
-
-    class UnavailableGateway:
-        async def get_active_turn(self, turn_id: str, owner_id: str) -> object:
-            raise GatewayUnavailable("supabase_status_401")
+async def test_calibration_rate_limit_runs_before_frame_decoding() -> None:
+    class RejectingLimiter:
+        def check(self, subject: str) -> None:
+            assert subject == "owner:valid"
+            raise RateLimitExceeded
 
     settings = SimpleNamespace(
         max_body_bytes=1_572_864,
@@ -187,8 +331,99 @@ async def test_validate_maps_supabase_outage_to_retryable_service_error() -> Non
         settings=settings,
         jwt=FakeJwt(),
         detector=FakeDetector(),
+        gateway=FakeGateway(),
+        calibration_limiter=RejectingLimiter(),
+    )
+    app = create_app(cast(Any, services))
+    files = [("frames", (f"{index}.jpg", b"not-a-jpeg", "image/jpeg")) for index in range(5)]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/calibrate",
+            headers={"Authorization": "Bearer valid"},
+            files=files,
+        )
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "RATE_LIMITED"
+
+
+@pytest.mark.asyncio
+async def test_calibration_requires_a_one_time_server_ticket_before_frame_decoding() -> None:
+    class TicketGateway(FakeGateway):
+        calls = 0
+
+        async def consume_vision_ticket(self, ticket: str, owner_id: str) -> bool:
+            assert ticket == "20000000-0000-4000-8000-000000000001"
+            assert owner_id == "owner:valid"
+            self.calls += 1
+            return False
+
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    gateway = TicketGateway()
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
+        gateway=gateway,
+    )
+    app = create_app(cast(Any, services))
+    files = [("frames", (f"{index}.jpg", b"not-a-jpeg", "image/jpeg")) for index in range(5)]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/calibrate",
+            headers={"Authorization": "Bearer valid"},
+            data={"ticket": "20000000-0000-4000-8000-000000000001"},
+            files=files,
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "CALIBRATION_TICKET_INVALID"
+    assert gateway.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_validate_maps_supabase_outage_to_retryable_service_error() -> None:
+    class FakeSigner:
+        def verify(self, token: str, subject: str) -> object:
+            return object()
+
+    class FakeRateLimiter:
+        calls = 0
+
+        def check(self, turn_id: str, sequence_no: int) -> None:
+            del turn_id, sequence_no
+            self.calls += 1
+
+    class UnavailableGateway:
+        async def get_active_turn(self, turn_id: str, owner_id: str) -> object:
+            raise GatewayUnavailable("supabase_status_401")
+
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    rate_limiter = FakeRateLimiter()
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
         signer=FakeSigner(),
-        rate_limiter=FakeRateLimiter(),
+        rate_limiter=rate_limiter,
         gateway=UnavailableGateway(),
     )
     app = create_app(cast(Any, services))
@@ -211,6 +446,151 @@ async def test_validate_maps_supabase_outage_to_retryable_service_error() -> Non
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "VISION_UNAVAILABLE"
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert rate_limiter.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_validate_subject_rate_limit_runs_before_turn_lookup() -> None:
+    class FakeSigner:
+        def verify(self, token: str, subject: str) -> object:
+            del token, subject
+            return object()
+
+    class RejectingLimiter:
+        def check(self, subject: str) -> None:
+            assert subject == "owner:valid"
+            raise RateLimitExceeded
+
+    class CountingGateway:
+        calls = 0
+
+        async def get_active_turn(self, turn_id: str, owner_id: str) -> object:
+            del turn_id, owner_id
+            self.calls += 1
+            return object()
+
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    gateway = CountingGateway()
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
+        signer=FakeSigner(),
+        validation_limiter=RejectingLimiter(),
+        gateway=gateway,
+    )
+    app = create_app(cast(Any, services))
+    files = [("frames", (f"{index}.jpg", b"frame", "image/jpeg")) for index in range(5)]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/validate",
+            headers={"Authorization": "Bearer valid"},
+            data={
+                "turnId": "10000000-0000-4000-8000-000000000001",
+                "sequenceNo": "1",
+                "calibrationToken": "signed-calibration-token",
+            },
+            files=files,
+        )
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "RATE_LIMITED"
+    assert gateway.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_remote_kill_switch_aborts_an_active_turn_before_frame_decoding() -> None:
+    class FakeSigner:
+        def verify(self, token: str, subject: str) -> CalibrationClaims:
+            del token
+            return CalibrationClaims(sub=subject, exp=9_999_999_999)
+
+    class UnusedTurnLimiter:
+        calls = 0
+
+        def check(self, turn_id: str, sequence_no: int) -> None:
+            del turn_id, sequence_no
+            self.calls += 1
+
+    class ActiveGateway:
+        aborted: tuple[str, str] | None = None
+
+        async def get_active_turn(self, turn_id: str, owner_id: str) -> ActiveTurn:
+            return ActiveTurn(
+                id=turn_id,
+                game_id="20000000-0000-4000-8000-000000000001",
+                player_id="30000000-0000-4000-8000-000000000001",
+                owner_id=owner_id,
+                status="active",
+                started_at=datetime.now(UTC),
+                deadline_at=datetime.now(UTC) + timedelta(seconds=30),
+                quest=QuestConfig(
+                    id="40000000-0000-4000-8000-000000000001",
+                    key="obj-cup",
+                    kind="object",
+                    target_class="cup",
+                    validator_config={},
+                ),
+            )
+
+        async def abort_turn(self, turn_id: str, reason: str) -> None:
+            self.aborted = (turn_id, reason)
+
+    class DisabledControl:
+        async def ensure_enabled(self) -> None:
+            raise VisionDisabled
+
+    settings = SimpleNamespace(
+        max_body_bytes=1_572_864,
+        cors_origins=["http://localhost:3000"],
+        model_version="test-model",
+        sentry_dsn=None,
+        environment="test",
+    )
+    gateway = ActiveGateway()
+    turn_limiter = UnusedTurnLimiter()
+    services = SimpleNamespace(
+        settings=settings,
+        jwt=FakeJwt(),
+        detector=FakeDetector(),
+        signer=FakeSigner(),
+        rate_limiter=turn_limiter,
+        gateway=gateway,
+        vision_control=DisabledControl(),
+    )
+    app = create_app(cast(Any, services))
+    files = [("frames", (f"{index}.jpg", b"not-a-jpeg", "image/jpeg")) for index in range(5)]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/validate",
+            headers={"Authorization": "Bearer valid"},
+            data={
+                "turnId": "10000000-0000-4000-8000-000000000001",
+                "sequenceNo": "1",
+                "calibrationToken": "signed-calibration-token",
+            },
+            files=files,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "system_error"
+    assert gateway.aborted == (
+        "10000000-0000-4000-8000-000000000001",
+        "vision_disabled",
+    )
+    assert turn_limiter.calls == 0
 
 
 @pytest.mark.asyncio
@@ -461,6 +841,7 @@ def stream_auth_message() -> dict[str, str]:
         "accessToken": "valid",
         "turnId": "10000000-0000-4000-8000-000000000001",
         "calibrationToken": "signed-calibration-token",
+        "deviceId": "test-device-0001",
     }
 
 

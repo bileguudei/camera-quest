@@ -14,6 +14,7 @@ export function Calibrating() {
   const facing = useGame((state) => state.cameraFacing);
   const demo = useGame((state) => state.cameraMode === "demo");
   const local = useGame((state) => state.backendMode === "local");
+  const gameId = useGame((state) => state.gameId);
   const prepareTurn = useGame((state) => state.prepareTurn);
   const preparationFailed = useGame((state) => state.preparationFailed);
   const { stream, retry } = useCameraContext();
@@ -41,8 +42,15 @@ export function Calibrating() {
         });
         return;
       }
+      if (!gameId) throw new Error("Game id missing before calibration");
       const accessToken = await getGameRepository().getAccessToken();
-      const result = await calibrate(videoRef.current!, accessToken, controller.signal);
+      const ticket = await getGameRepository().issueVisionTicket(gameId);
+      const result = await calibrate(
+        videoRef.current!,
+        accessToken,
+        ticket.ticket,
+        controller.signal,
+      );
       await prepareTurnRef.current({
         token: result.calibrationToken,
         backgroundClasses: result.backgroundClasses,
@@ -72,7 +80,7 @@ export function Calibrating() {
       preparationFailedRef.current(appError.code);
     });
     return () => controller.abort();
-  }, [demo, local, stream]);
+  }, [demo, gameId, local, stream]);
 
   return (
     <Screen padding="none" backdrop={false}>

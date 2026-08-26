@@ -58,6 +58,7 @@ class StreamAuthMessage(ApiModel):
     access_token: str = Field(alias="accessToken", min_length=1)
     turn_id: str = Field(alias="turnId", min_length=1)
     calibration_token: str = Field(alias="calibrationToken", min_length=16)
+    device_id: str = Field(alias="deviceId", min_length=8, max_length=128)
 
 
 class StreamBatchMessage(ApiModel):

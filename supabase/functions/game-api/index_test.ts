@@ -36,6 +36,23 @@ Deno.test("rejects invalid turn ids", () => {
   );
 });
 
+Deno.test("disconnect recovery requires a real turn id", () => {
+  assertEquals(
+    commandSchema.safeParse({
+      command: "recover-disconnected-turn",
+      payload: { turnId: "5c1f8f38-4b1e-4a4a-9a3c-2c6b0f4d7a11" },
+    }).success,
+    true,
+  );
+  assertEquals(
+    commandSchema.safeParse({
+      command: "recover-disconnected-turn",
+      payload: { turnId: "attacker-controlled" },
+    }).success,
+    false,
+  );
+});
+
 Deno.test("requires a non-empty bearer token", () => {
   assertEquals(bearerToken(null), null);
   assertEquals(bearerToken("Basic abc"), null);
@@ -96,7 +113,7 @@ Deno.test("rejects an oversized lobby display name", () => {
   assertEquals(
     commandSchema.safeParse({
       command: "create-online-game",
-      payload: { name: "x".repeat(25), environment: "home" },
+      payload: { name: "x".repeat(25), environment: "home", gameKind: "mimic_rush" },
     }).success,
     false,
   );
@@ -106,7 +123,7 @@ Deno.test("create-online-game requires a known environment", () => {
   assertEquals(
     commandSchema.safeParse({
       command: "create-online-game",
-      payload: { name: "Bat", environment: "outdoor" },
+      payload: { name: "Bat", environment: "outdoor", gameKind: "camera_quest" },
     }).success,
     true,
   );
@@ -114,8 +131,44 @@ Deno.test("create-online-game requires a known environment", () => {
   assertEquals(
     commandSchema.safeParse({
       command: "create-online-game",
-      payload: { name: "Bat", environment: "moon" },
+      payload: { name: "Bat", environment: "moon", gameKind: "camera_quest" },
     }).success,
     false,
   );
+});
+
+Deno.test("Mimic Rush commands require an explicit game kind and bounded turn id", () => {
+  const turnId = "5c1f8f38-4b1e-4a4a-9a3c-2c6b0f4d7a11";
+  assertEquals(
+    commandSchema.safeParse({
+      command: "create-online-game",
+      payload: { name: "Bat", environment: "home", gameKind: "mimic_rush" },
+    }).success,
+    true,
+  );
+  assertEquals(
+    commandSchema.safeParse({
+      command: "create-online-game",
+      payload: { name: "Bat", environment: "home", gameKind: "dance" },
+    }).success,
+    false,
+  );
+  for (const command of ["activate-mimic-turn", "pass-mimic-turn", "expire-mimic-turn"]) {
+    assertEquals(commandSchema.safeParse({ command, payload: { turnId } }).success, true);
+    assertEquals(
+      commandSchema.safeParse({ command, payload: { turnId: "not-a-uuid" } }).success,
+      false,
+    );
+  }
+});
+
+Deno.test("reliability commands require a bounded game id", () => {
+  const gameId = "5c1f8f38-4b1e-4a4a-9a3c-2c6b0f4d7a11";
+  for (const command of ["heartbeat-game", "request-rematch", "issue-vision-ticket"]) {
+    assertEquals(commandSchema.safeParse({ command, payload: { gameId } }).success, true);
+    assertEquals(
+      commandSchema.safeParse({ command, payload: { gameId: "not-a-uuid" } }).success,
+      false,
+    );
+  }
 });

@@ -1,6 +1,7 @@
 import type {
   ActiveTurn,
   GameEnvironment,
+  GameKind,
   GameSession,
   LobbyState,
   Player,
@@ -28,6 +29,11 @@ export interface ExpireTurnResult {
   remainingMs?: number;
 }
 
+export interface VisionTicket {
+  ticket: string;
+  expiresAt: string;
+}
+
 export interface TurnChannelHandlers {
   onFrame?: (frame: TurnPreviewFrame) => void;
   onSignal?: (signal: TurnSignal) => void;
@@ -51,15 +57,26 @@ export interface GameRepository {
   prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn>;
   activateTurn(turnId: string): Promise<ActiveTurn>;
   expireTurn(turnId: string): Promise<ExpireTurnResult>;
+  recoverDisconnectedTurn(turnId: string): Promise<LobbyState>;
   completeGame(gameId: string): Promise<void>;
   abandonGame(gameId: string): Promise<void>;
   submitTurnFeedback(turnId: string, reason: TurnFeedbackReason): Promise<void>;
   /** Online lobbies. Every call returns the whole authoritative table state. */
-  createOnlineGame(name: string, environment: GameEnvironment): Promise<LobbyState>;
+  createOnlineGame(
+    name: string,
+    environment: GameEnvironment,
+    gameKind: GameKind,
+  ): Promise<LobbyState>;
   joinGame(joinCode: string, name: string): Promise<LobbyState>;
   readGameState(gameId: string): Promise<LobbyState>;
   setReady(gameId: string, ready: boolean): Promise<LobbyState>;
   startOnlineGame(gameId: string): Promise<LobbyState>;
+  activateMimicTurn(turnId: string): Promise<LobbyState>;
+  passMimicTurn(turnId: string): Promise<LobbyState>;
+  expireMimicTurn(turnId: string): Promise<LobbyState>;
+  heartbeatGame(gameId: string): Promise<LobbyState>;
+  requestRematch(gameId: string): Promise<LobbyState>;
+  issueVisionTicket(gameId: string): Promise<VisionTicket>;
   leaveGame(gameId: string): Promise<void>;
   /**
    * Compare-and-swap: the pointer only moves when the server agrees the caller

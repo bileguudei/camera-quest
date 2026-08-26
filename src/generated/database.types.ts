@@ -1,5 +1,5 @@
 /** Generated from Supabase schema. Do not edit by hand.
- * schema-sha256: a7ddb2722ba0ccc2380c21f6ae4f01d5f9e02b05a1d5abe1bcc6706b82025718
+ * schema-sha256: d300081f9382e453b9047d36c2efc6e9a1561e7eab9aef8369d2a9674d0ae334
  */
 
 export type Json =
@@ -49,12 +49,14 @@ export type Database = {
           final_rank: number | null
           game_id: string
           id: string
+          last_seen_at: string
           left_at: string | null
           match_score: number
           mode: Database["public"]["Enums"]["game_mode"]
           owner_id: string
           player_id: string
           ready: boolean
+          rematch_ready: boolean
           seat: number
           successful_turns: number
         }
@@ -63,12 +65,14 @@ export type Database = {
           final_rank?: number | null
           game_id: string
           id?: string
+          last_seen_at?: string
           left_at?: string | null
           match_score?: number
           mode?: Database["public"]["Enums"]["game_mode"]
           owner_id: string
           player_id: string
           ready?: boolean
+          rematch_ready?: boolean
           seat: number
           successful_turns?: number
         }
@@ -77,12 +81,14 @@ export type Database = {
           final_rank?: number | null
           game_id?: string
           id?: string
+          last_seen_at?: string
           left_at?: string | null
           match_score?: number
           mode?: Database["public"]["Enums"]["game_mode"]
           owner_id?: string
           player_id?: string
           ready?: boolean
+          rematch_ready?: boolean
           seat?: number
           successful_turns?: number
         }
@@ -110,12 +116,15 @@ export type Database = {
           current_round: number
           current_seat: number
           environment: Database["public"]["Enums"]["game_environment"]
+          game_kind: Database["public"]["Enums"]["game_kind"]
           host_id: string
           id: string
           join_code: string | null
           lobby_open: boolean
           mode: Database["public"]["Enums"]["game_mode"]
           owner_id: string
+          rematch_game_id: string | null
+          rematch_of: string | null
           rules_version: string
           started_at: string
           status: Database["public"]["Enums"]["game_status"]
@@ -126,12 +135,15 @@ export type Database = {
           current_round?: number
           current_seat?: number
           environment?: Database["public"]["Enums"]["game_environment"]
+          game_kind?: Database["public"]["Enums"]["game_kind"]
           host_id: string
           id?: string
           join_code?: string | null
           lobby_open?: boolean
           mode?: Database["public"]["Enums"]["game_mode"]
           owner_id: string
+          rematch_game_id?: string | null
+          rematch_of?: string | null
           rules_version?: string
           started_at?: string
           status?: Database["public"]["Enums"]["game_status"]
@@ -142,17 +154,35 @@ export type Database = {
           current_round?: number
           current_seat?: number
           environment?: Database["public"]["Enums"]["game_environment"]
+          game_kind?: Database["public"]["Enums"]["game_kind"]
           host_id?: string
           id?: string
           join_code?: string | null
           lobby_open?: boolean
           mode?: Database["public"]["Enums"]["game_mode"]
           owner_id?: string
+          rematch_game_id?: string | null
+          rematch_of?: string | null
           rules_version?: string
           started_at?: string
           status?: Database["public"]["Enums"]["game_status"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "games_rematch_game_id_fkey"
+            columns: ["rematch_game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "games_rematch_of_fkey"
+            columns: ["rematch_of"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       levels: {
         Row: {
@@ -168,6 +198,140 @@ export type Database = {
           minimum_xp?: number
         }
         Relationships: []
+      }
+      mimic_matches: {
+        Row: {
+          challenge_seed: number
+          created_at: string
+          current_duration_ms: number
+          game_id: string
+          initial_player_count: number
+          turn_number: number
+        }
+        Insert: {
+          challenge_seed: number
+          created_at?: string
+          current_duration_ms?: number
+          game_id: string
+          initial_player_count: number
+          turn_number?: number
+        }
+        Update: {
+          challenge_seed?: number
+          created_at?: string
+          current_duration_ms?: number
+          game_id?: string
+          initial_player_count?: number
+          turn_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mimic_matches_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: true
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mimic_player_states: {
+        Row: {
+          eliminated_at: string | null
+          game_id: string
+          game_player_id: string
+          lives: number
+        }
+        Insert: {
+          eliminated_at?: string | null
+          game_id: string
+          game_player_id: string
+          lives?: number
+        }
+        Update: {
+          eliminated_at?: string | null
+          game_id?: string
+          game_player_id?: string
+          lives?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mimic_player_states_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mimic_player_states_game_player_id_fkey"
+            columns: ["game_player_id"]
+            isOneToOne: true
+            referencedRelation: "game_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mimic_turns: {
+        Row: {
+          challenge_id: string
+          deadline_at: string | null
+          duration_ms: number
+          game_id: string
+          game_player_id: string
+          id: string
+          lives_after: number | null
+          prepared_at: string
+          resolved_at: string | null
+          started_at: string | null
+          status: string
+          success: boolean | null
+          turn_number: number
+        }
+        Insert: {
+          challenge_id: string
+          deadline_at?: string | null
+          duration_ms: number
+          game_id: string
+          game_player_id: string
+          id?: string
+          lives_after?: number | null
+          prepared_at?: string
+          resolved_at?: string | null
+          started_at?: string | null
+          status?: string
+          success?: boolean | null
+          turn_number: number
+        }
+        Update: {
+          challenge_id?: string
+          deadline_at?: string | null
+          duration_ms?: number
+          game_id?: string
+          game_player_id?: string
+          id?: string
+          lives_after?: number | null
+          prepared_at?: string
+          resolved_at?: string | null
+          started_at?: string | null
+          status?: string
+          success?: boolean | null
+          turn_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mimic_turns_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mimic_turns_game_player_id_fkey"
+            columns: ["game_player_id"]
+            isOneToOne: false
+            referencedRelation: "game_players"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       player_achievements: {
         Row: {
@@ -505,6 +669,86 @@ export type Database = {
           },
         ]
       }
+      vision_rate_buckets: {
+        Row: {
+          bucket_key: string
+          expires_at: string
+          request_count: number
+          window_started_at: string
+        }
+        Insert: {
+          bucket_key: string
+          expires_at: string
+          request_count: number
+          window_started_at: string
+        }
+        Update: {
+          bucket_key?: string
+          expires_at?: string
+          request_count?: number
+          window_started_at?: string
+        }
+        Relationships: []
+      }
+      vision_service_controls: {
+        Row: {
+          enabled: boolean
+          reason: string
+          service: string
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          reason?: string
+          service: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          reason?: string
+          service?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vision_tickets: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          game_id: string
+          id: string
+          owner_id: string
+          purpose: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          game_id: string
+          id?: string
+          owner_id: string
+          purpose: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          game_id?: string
+          id?: string
+          owner_id?: string
+          purpose?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vision_tickets_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -515,12 +759,25 @@ export type Database = {
         Args: { p_reason?: string; p_turn_id: string }
         Returns: undefined
       }
+      activate_mimic_turn: { Args: { p_turn_id: string }; Returns: Json }
       activate_turn: { Args: { p_turn_id: string }; Returns: Json }
       advance_turn_pointer: {
         Args: { p_from_round: number; p_from_seat: number; p_game_id: string }
         Returns: Json
       }
+      claim_vision_budget: {
+        Args: {
+          p_bucket_key: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
       complete_game: { Args: { p_game_id: string }; Returns: undefined }
+      consume_vision_ticket: {
+        Args: { p_owner_id: string; p_purpose: string; p_ticket: string }
+        Returns: boolean
+      }
       create_game: {
         Args: {
           p_environment?: Database["public"]["Enums"]["game_environment"]
@@ -528,23 +785,51 @@ export type Database = {
         }
         Returns: Json
       }
-      create_online_game: {
-        Args: {
-          p_environment?: Database["public"]["Enums"]["game_environment"]
-          p_name: string
-        }
+      create_online_game:
+        | {
+            Args: {
+              p_environment?: Database["public"]["Enums"]["game_environment"]
+              p_name: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_environment: Database["public"]["Enums"]["game_environment"]
+              p_game_kind: Database["public"]["Enums"]["game_kind"]
+              p_name: string
+            }
+            Returns: Json
+          }
+      expire_mimic_turn: { Args: { p_turn_id: string }; Returns: Json }
+      expire_turn: { Args: { p_turn_id: string }; Returns: Json }
+      finish_mimic_turn: {
+        Args: { p_success: boolean; p_turn_id: string }
         Returns: Json
       }
-      expire_turn: { Args: { p_turn_id: string }; Returns: Json }
       game_state: { Args: { p_game_id: string }; Returns: Json }
       generate_join_code: { Args: never; Returns: string }
+      heartbeat_game: { Args: { p_game_id: string }; Returns: Json }
       is_game_member: { Args: { p_game_id: string }; Returns: boolean }
+      issue_vision_ticket: {
+        Args: { p_game_id: string; p_purpose?: string }
+        Returns: Json
+      }
       join_game: {
         Args: { p_join_code: string; p_name: string }
         Returns: Json
       }
       leave_game: { Args: { p_game_id: string }; Returns: Json }
       level_for_xp: { Args: { p_total_xp: number }; Returns: number }
+      mimic_challenge_at: {
+        Args: { p_seed: number; p_turn_number: number }
+        Returns: string
+      }
+      mimic_turn_duration: {
+        Args: { p_initial_player_count: number; p_turn_number: number }
+        Returns: number
+      }
+      pass_mimic_turn: { Args: { p_turn_id: string }; Returns: Json }
       prepare_turn: {
         Args: {
           p_background_classes?: string[]
@@ -566,6 +851,8 @@ export type Database = {
         }
         Returns: undefined
       }
+      recover_disconnected_turn: { Args: { p_turn_id: string }; Returns: Json }
+      request_rematch: { Args: { p_game_id: string }; Returns: Json }
       resolve_turn: {
         Args: {
           p_confidence: number
@@ -591,9 +878,11 @@ export type Database = {
         Args: { p_elapsed_ms: number; p_game_id: string; p_player_id: string }
         Returns: string[]
       }
+      vision_service_state: { Args: never; Returns: Json }
     }
     Enums: {
       game_environment: "school" | "home" | "outdoor"
+      game_kind: "camera_quest" | "mimic_rush"
       game_mode: "local" | "online"
       game_status: "active" | "completed" | "abandoned"
       quest_difficulty: "easy" | "medium" | "hard"
@@ -728,6 +1017,7 @@ export const Constants = {
   public: {
     Enums: {
       game_environment: ["school", "home", "outdoor"],
+      game_kind: ["camera_quest", "mimic_rush"],
       game_mode: ["local", "online"],
       game_status: ["active", "completed", "abandoned"],
       quest_difficulty: ["easy", "medium", "hard"],
