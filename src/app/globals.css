@@ -316,6 +316,43 @@ button {
       color-mix(in oklab, var(--glow, var(--accent)) 65%, transparent);
 }
 
+/*
+ * The artwork is transparent in the middle and keeps most of its photo cards
+ * near the edges. A tight centre mask made those cards effectively disappear
+ * on wide screens, especially after display/stream compression. Keep the
+ * quieter mobile treatment, but reveal the full composition on desktop.
+ */
+.landing-background-image {
+  opacity: 0.09;
+  transform: scale(1.25);
+  mask-image: radial-gradient(ellipse at center, black 14%, transparent 62%);
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    black 14%,
+    transparent 62%
+  );
+}
+
+@media (min-width: 64rem) {
+  .landing-background-image {
+    opacity: 0.22;
+    transform: scale(1.06);
+    filter: brightness(0.82) saturate(0.9);
+    mask-image: radial-gradient(
+      ellipse at center,
+      black 20%,
+      rgb(0 0 0 / 0.92) 64%,
+      transparent 100%
+    );
+    -webkit-mask-image: radial-gradient(
+      ellipse at center,
+      black 20%,
+      rgb(0 0 0 / 0.92) 64%,
+      transparent 100%
+    );
+  }
+}
+
 /* ==========================================================================
    Keyframes (transform/opacity only — safe to run over live video)
    ========================================================================== */

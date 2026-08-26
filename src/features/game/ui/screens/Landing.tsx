@@ -75,13 +75,7 @@ export function Landing() {
             fill
             sizes="100vw"
             priority
-            className="scale-125 object-cover opacity-[0.09]"
-            style={{
-              maskImage:
-                "radial-gradient(ellipse at center, black 14%, transparent 52%)",
-              WebkitMaskImage:
-                "radial-gradient(ellipse at center, black 14%, transparent 52%)",
-            }}
+            className="landing-background-image object-cover"
           />
         </div>
 
