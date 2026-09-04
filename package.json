@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "smoke:deployed": "playwright test --config playwright.deployed.config.ts",
     "generate:vision": "openapi-typescript vision-service/openapi.json -o src/generated/vision-api.ts",
     "generate:database": "node scripts/generate-database-types.mjs",
     "check:contracts": "node scripts/check-generated-contracts.mjs",

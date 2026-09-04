@@ -161,6 +161,27 @@ Chrome дээр [http://localhost:3000](http://localhost:3000)-ийг нээгэ
 - Env өөрчилсний дараа `npm run dev`-ийг stop хийгээд дахин асаана.
 - `service_role`/secret key-г browser-д ашиглахгүй.
 
+### Deploy хийсэн site дээр тоглоом эхлэхгүй байна
+
+Landing page хэвийн нээгдээд Camera Check дээр гацаж байвал эхлээд backend-үүд амьд эсэхийг
+шалгана. Supabase project түр зогссон эсвэл устсан бол host нь DNS-д ч байхаа болино:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/health"
+curl -sS -o /dev/null -w '%{http_code}\n' "$NEXT_PUBLIC_VISION_URL/health"
+```
+
+`Could not resolve host` буюу `NXDOMAIN` гарвал Supabase dashboard дээр project-оо шалгана —
+үнэгүй project удаан ашиглаагүй үед зогсдог. Project шинээр үүсгэсэн бол `supabase db push`
+хийж migration-уудаа буулгаад Vercel дээрх `NEXT_PUBLIC_SUPABASE_*` утгуудыг шинэчилж, дахин
+deploy хийнэ. Мөн Edge Function-ий `CORS_ALLOWED_ORIGINS`-д deploy хийсэн domain-оо бичнэ.
+
+Deploy хийсэн site-ыг бүтнээр нь шалгах:
+
+```bash
+SMOKE_URL=https://camera-quest.vercel.app npm run smoke:deployed
+```
+
 ## Developer setup
 
 Энэ хэсэг нь database эсвэл AI backend өөрчлөх хүнд зориулагдсан. Зөвхөн frontend ажиллуулах бол
@@ -233,6 +254,15 @@ npm run test:python    # Python validator/API
 npm run test:supabase  # Docker ажиллаж байх ёстой
 npm run test:edge      # Deno хэрэгтэй
 ```
+
+Дээрх бүх test нь backend-ийг орлуулж (stub) ажилладаг тул deploy хийсэн Supabase унтарсан ч
+ногоон хэвээр байна. Deploy хийсэн site-ыг үнэхээр тоглож үзэх ганц шалгалт нь:
+
+```bash
+npm run smoke:deployed   # SMOKE_URL-ээр өөр deployment заана
+```
+
+Энэ нь `deployed-smoke` workflow-оор өдөр бүр автоматаар ажиллана.
 
 ## Folder бүтэц
 

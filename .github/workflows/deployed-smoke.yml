@@ -1,0 +1,51 @@
+name: deployed-smoke
+
+# The pull-request suite stubs Supabase and Modal out, so it stays green while
+# the deployed game is unplayable — a paused or deleted Supabase project breaks
+# nothing that CI looks at. This job plays the deployed site for real, once a
+# day, so an outage is found by a schedule instead of by whoever opens the link.
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Deployment to check
+        required: false
+        default: https://camera-quest.vercel.app
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Chromium
+        run: npx playwright install chromium
+        timeout-minutes: 6
+
+      - name: Play the deployed game
+        run: npm run smoke:deployed
+        timeout-minutes: 6
+        env:
+          SMOKE_URL: ${{ inputs.url || 'https://camera-quest.vercel.app' }}
+
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-smoke-trace
+          path: test-results/
+          retention-days: 7

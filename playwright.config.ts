@@ -5,6 +5,9 @@ const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  // The deployed smoke test has no local server to talk to; it runs from
+  // playwright.deployed.config.ts against a URL that is already live.
+  testIgnore: "**/deployed-smoke.spec.ts",
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
