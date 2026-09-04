@@ -22,6 +22,13 @@ const MODEL_MS = fastDevelopmentFlow ? 30 : 950;
 const WARMUP_MS = fastDevelopmentFlow ? 30 : 700;
 const WARMUP_RETRY_BASE_MS = fastDevelopmentFlow ? 50 : 1_500;
 const WARMUP_RETRY_MAX_MS = fastDevelopmentFlow ? 100 : 6_000;
+/**
+ * A Modal cold start is over well inside this budget. Anything still failing
+ * afterwards is an outage, not a queue, and looping on it forever leaves the
+ * player watching "retrying automatically" with no way to learn that the
+ * backend is simply gone.
+ */
+export const WARMUP_MAX_RETRIES = fastDevelopmentFlow ? 1 : 4;
 
 export const warmupRetryDelay = (attempt: number) =>
   Math.min(WARMUP_RETRY_BASE_MS * 2 ** Math.min(attempt, 3), WARMUP_RETRY_MAX_MS);
@@ -47,6 +54,11 @@ export function CameraCheck() {
   const [readyDone, setReadyDone] = useState(false);
   const [warmupAttempt, setWarmupAttempt] = useState(0);
   const [warmupFailed, setWarmupFailed] = useState(false);
+  const [warmupUnreachable, setWarmupUnreachable] = useState(false);
+  // `warmupAttempt` only ever climbs, because it is what re-runs the effect.
+  // The budget is counted apart from it so pressing Дахин can hand back a full
+  // set of automatic retries without rewinding the trigger.
+  const autoRetriesLeft = useRef(WARMUP_MAX_RETRIES);
   const preflight = useCameraPreflight(videoRef, status, demo);
 
   // The checklist only ever counts while the camera is live.
@@ -76,6 +88,7 @@ export function CameraCheck() {
       .then(() => {
         if (alive) {
           setWarmupFailed(false);
+          setWarmupUnreachable(false);
           setModelDone(true);
         }
       })
@@ -83,9 +96,17 @@ export function CameraCheck() {
         if (!alive || (error instanceof DOMException && error.name === "AbortError")) return;
         setWarmupFailed(true);
         setModelDone(false);
+        if (autoRetriesLeft.current <= 0) {
+          // Out of budget: say the backend is unreachable rather than keep
+          // promising a retry that will fail the same way.
+          setWarmupUnreachable(true);
+          return;
+        }
+        const spent = WARMUP_MAX_RETRIES - autoRetriesLeft.current;
+        autoRetriesLeft.current -= 1;
         retryTimer = window.setTimeout(
           () => setWarmupAttempt((attempt) => attempt + 1),
-          warmupRetryDelay(warmupAttempt),
+          warmupRetryDelay(spent),
         );
       });
     return () => {
@@ -258,6 +279,8 @@ export function CameraCheck() {
             type="button"
             onClick={() => {
               setWarmupFailed(false);
+              setWarmupUnreachable(false);
+              autoRetriesLeft.current = WARMUP_MAX_RETRIES;
               setWarmupAttempt((attempt) => attempt + 1);
             }}
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-accent/40 px-2.5 py-1 text-xs font-bold text-accent transition hover:bg-accent/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -269,9 +292,17 @@ export function CameraCheck() {
       </div>
 
       {showWarmupFailure ? (
-        <p role="alert" className="mt-2 text-center text-sm font-bold text-warn">
-          AI түр ачаалалтай байна. Автоматаар дахин оролдож байна.
-        </p>
+        warmupUnreachable ? (
+          <p role="alert" className="mt-2 text-center text-sm font-bold text-danger">
+            Тоглоомын сервертэй холбогдож чадсангүй. Интернэтээ шалгаад{" "}
+            <span className="whitespace-nowrap">«Дахин»</span> дарна уу. Асуудал үргэлжилбэл
+            үйлчилгээ түр унтарсан байж болно.
+          </p>
+        ) : (
+          <p role="alert" className="mt-2 text-center text-sm font-bold text-warn">
+            AI түр ачаалалтай байна. Автоматаар дахин оролдож байна.
+          </p>
+        )
       ) : null}
 
       {(gameError || backendUnavailable) && (
