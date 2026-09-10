@@ -20,7 +20,7 @@ import type { PrepareTurnInput } from "../infrastructure/gameRepository";
 import type { TurnFeedbackReason } from "../infrastructure/gameRepository";
 import { toAppError } from "@/shared/errors/appError";
 import { GameActorContext } from "./GameProvider";
-
+import { playSound } from "./useGameSounds";
 export interface CalibrationPayload {
   token: string;
   backgroundClasses: string[];
@@ -210,7 +210,10 @@ export function useGame<T>(selector: (state: GameView) => T): T {
           // short reconnect is covered by the next realtime snapshot/poll.
         }
       },
-      setPlayerCount: (count) => actor.send({ type: "SET_PLAYER_COUNT", count }),
+      setPlayerCount: (count) => {
+  playSound("menu");
+  actor.send({ type: "SET_PLAYER_COUNT", count });
+},
       setPlayerName: (id, name) => actor.send({ type: "SET_PLAYER_NAME", id, name }),
       confirmPlayers: () => actor.send({ type: "CONFIRM_PLAYERS" }),
       setCameraFacing: (facing) => actor.send({ type: "SET_CAMERA_FACING", facing }),

@@ -1,6 +1,7 @@
 "use client";
 
-import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
+import type { ButtonHTMLAttributes, CSSProperties, MouseEvent, ReactNode } from "react";
+import { playSound } from "@/features/game/application/useGameSounds";
 
 /**
  * Three variants, deliberately. `accent` duplicated primary's job and made it
@@ -20,14 +21,11 @@ interface GameButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const SIZES: Record<Size, string> = {
-  // Every size clears the 44px touch minimum.
   sm: "min-h-11 px-4 text-base rounded-g2",
   md: "min-h-14 px-6 text-lg rounded-g3",
   lg: "min-h-16 px-7 text-xl sm:text-2xl rounded-g3",
 };
 
-// All three sit on the same pressable edge. A flat outlined secondary next to
-// a raised primary read as two different kits rather than one choice.
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-primary text-primary-ink btn-3d",
   danger: "bg-danger text-[#2b0710] btn-3d",
@@ -50,13 +48,20 @@ export function GameButton({
   className = "",
   style,
   children,
+  onClick,
   ...rest
 }: GameButtonProps) {
   const custom = { "--btn-edge": EDGES[variant], ...style } as CSSProperties;
 
+  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    playSound("menu");
+    onClick?.(e);
+  };
+
   return (
     <button
       {...rest}
+      onClick={handleClick}
       style={custom}
       className={[
         "relative inline-flex items-center justify-center gap-2.5",
@@ -83,11 +88,18 @@ export function IconButton({
   label,
   className = "",
   children,
+  onClick,
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    playSound("menu");
+    onClick?.(e);
+  };
+
   return (
     <button
       {...rest}
+      onClick={handleClick}
       aria-label={label}
       title={label}
       className={[
