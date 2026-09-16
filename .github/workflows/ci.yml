@@ -107,9 +107,13 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      # Pinned, not `latest`: the CLI's type generator changes its formatting
+      # between releases, so a floating version makes the `git diff` check at
+      # the end of this job fail on a schema nobody touched. Bump this in the
+      # same commit that regenerates src/generated/database.types.ts.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.98.2
       - name: Edge Function contract and reliability commands
         run: npm run test:edge
       - name: Start local Supabase

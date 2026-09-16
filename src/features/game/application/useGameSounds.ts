@@ -20,7 +20,8 @@ export function playSound(key: SoundKey) {
     cache[key] = audio;
   }
   audio.currentTime = 0;
-  audio.play().catch(() => {});
+  // Older browsers, and jsdom under test, return undefined instead of a promise.
+  void audio.play()?.catch(() => {});
 }
 
 export function useGameSounds() {
